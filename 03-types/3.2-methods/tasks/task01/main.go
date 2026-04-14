@@ -16,11 +16,20 @@ package main
 import "fmt"
 
 // TODO: объяви структуру Book с полями Title и Pages
-
+type Book struct{
+	Title string
+	Pages int 
+}
 // TODO: добавь метод Summary() string с получателем-значением
-
+func (b Book) Summary() string{
+	return fmt.Sprintf("%s (%d pages)", b.Title, b.Pages)
+}
 func main() {
 	// TODO: создай значение Book с Title: "Go in Action", Pages: 350
+	b := Book{
+		Title: "Go in Action",
+		Pages: 350,
+	}
 
 	fmt.Println(b.Summary())
 }

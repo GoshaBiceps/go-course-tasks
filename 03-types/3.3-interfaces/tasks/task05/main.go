@@ -13,6 +13,16 @@ import "fmt"
 //       если x — string, выводи "length: <len>"
 //       иначе выводи "not a string"
 
+func printStringLength(x any) {
+	s, ok := x.(string)
+	if ok {
+		fmt.Println("lenght:", len(s))
+		return 
+	}
+	
+	fmt.Println("not a string")
+}
+
 func main() {
 	printStringLength("hello")
 	printStringLength(42)

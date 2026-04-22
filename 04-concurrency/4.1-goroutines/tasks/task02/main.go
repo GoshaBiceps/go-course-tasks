@@ -25,17 +25,19 @@ package main
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 func main() {
-	var counter int // ПРОБЛЕМА: несколько горутин пишут сюда одновременно
+	var counter atomic.Int64 // ПРОБЛЕМА: несколько горутин пишут сюда одновременно
 	var wg sync.WaitGroup
 
 	for i := 0; i < 1000; i++ {
 		wg.Add(1)
 		go func() {
+			counter.Add(1)
 			defer wg.Done()
-			counter++ // ГОНКА: чтение + запись не атомарны!
+
 		}()
 	}
 

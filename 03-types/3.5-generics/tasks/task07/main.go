@@ -13,46 +13,49 @@ package main
 import "fmt"
 
 // TODO: объяви структуру Store[T any] с полем items []T
-type Store[T any] struct{
-	items []T 
+type Store[T any] struct {
+	items []T
 }
+
 // TODO: добавь метод Add(item T) — добавляет элемент в items
-func (s *Store[T]) Add(item T){
-	 s.items = append(s.items, item)
+func (s *Store[T]) Add(item T) {
+	s.items = append(s.items, item)
 }
+
 // TODO: добавь метод All() []T — возвращает items
 func (s *Store[T]) All() []T {
-	result := make([]T, len(s.items)) 
+	result := make([]T, len(s.items))
 	copy(result, s.items)
-	return result  //  возвращаем копию 
+	return result //  возвращаем копию
 }
+
 // TODO: напиши функцию Contains[T comparable](items []T, target T) bool
-//       возвращает true если target есть в items
-func Contains[ T comparable](items []T, target T) bool {
+//
+//	возвращает true если target есть в items
+func Contains[T comparable](items []T, target T) bool {
 	for _, v := range items {
-		if  v == target {
-			return true 
+		if v == target {
+			return true
 		}
 	}
 
-	return false 
+	return false
 }
-
 func main() {
 	// TODO: создай Store[string], добавь "go", "rust", "python"
 	//       выведи "strings:", ss.All()
-	 ss := Store[string]{}
-	 ss.Add("go")
-	 ss.Add("rust")
-	 ss.Add("python")
-	 fmt.Println("strings:", ss.All())
+	ss := Store[string]{}
+	ss.Add("go")
+	ss.Add("rust")
+	ss.Add("python")
+	fmt.Println("strings:", ss.All())
 	// TODO: создай Store[int], добавь 1, 2, 3
 	//       выведи "ints:", si.All()
-	 si := Store[int]{}
-	 si.Add(1)
-	 si.Add(2)
-	 si.Add(3)
-	 fmt.Println("ints:", si.All())
+	si := Store[int]{}
+	si.Add(1)
+	si.Add(2)
+	si.Add(3)
+	fmt.Println("ints:", si.All())
 	// TODO: выведи результаты Contains:
 	//       Contains(ss.All(), "go")  → "contains \"go\": true"
 	//       Contains(ss.All(), "java") → "contains \"java\": false"

@@ -44,14 +44,19 @@ func main() {
 	services := []string{"users", "products", "broken-service"}
 
 	// TODO: создай errgroup
-	// g := new(errgroup.Group)
+	var g errgroup.Group
 
 	// TODO: для каждого сервиса запусти g.Go(func() error { ... })
 	// Внутри вызови callService(service) и верни результат
+	for _, s := range services {
+		service := s
+		g.Go(func() error { return callService(service) })
+	}
 
 	// TODO: вызови g.Wait() и обработай ошибку
-
-	_ = errgroup.Group{}
-	_ = services
-	_ = fmt.Println
+	err := g.Wait()
+	if err != nil {
+		fmt.Println("Ошибка:", err)
+		return
+	}
 }

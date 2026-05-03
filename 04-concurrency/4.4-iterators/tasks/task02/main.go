@@ -52,5 +52,4 @@ func main() {
 	}
 	fmt.Println()
 
-	_ = iter.Seq[int](nil) // убери когда начнёшь использовать
 }

@@ -1,0 +1,82 @@
+// ============================================================
+// Задача: Cyclic Barrier — повторяемый барьер  🔴 Senior
+// ============================================================
+//
+// Вопрос с собесов уровня Senior.
+//
+// Барьер — примитив синхронизации: N горутин выполняют работу "фазами".
+// Никакая горутина не переходит к следующей фазе пока все не завершили текущую.
+//
+//   type Barrier struct { ... }
+//
+//   func NewBarrier(n int) *Barrier
+//   func (b *Barrier) Wait() // блокируется пока все n горутин не вызвали Wait
+//
+// В отличие от sync.WaitGroup:
+//   - Многоразовый (cyclic): после прохода барьера все горутины стартуют снова
+//   - Нельзя динамически менять счётчик
+//
+// Сценарий: параллельная симуляция. N воркеров выполняют шаг симуляции,
+// потом все ждут на барьере, потом все вместе начинают следующий шаг.
+//
+// Проверь:
+//   go test -race -v ./...
+
+package main
+
+import (
+	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+type Barrier struct {
+	n     int
+	count atomic.Int32
+	mu    sync.Mutex
+	cond  *sync.Cond
+	phase atomic.Int64 // для определения "поколения" барьера
+}
+
+// TODO: реализуй NewBarrier
+func NewBarrier(n int) *Barrier {
+	b := &Barrier{n: n}
+	b.cond = sync.NewCond(&b.mu)
+	return b
+}
+
+// TODO: реализуй Wait
+// Подсказка: последняя пришедшая горутина пробуждает остальных; остальные ждут смены phase
+func (b *Barrier) Wait() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	// TODO
+}
+
+func main() {
+	const workers = 4
+	const phases = 3
+
+	barrier := NewBarrier(workers)
+	var wg sync.WaitGroup
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		id := i
+		go func() {
+			defer wg.Done()
+			for phase := 0; phase < phases; phase++ {
+				// Имитируем работу разной длины
+				time.Sleep(time.Duration(50*(id+1)) * time.Millisecond)
+				fmt.Printf("воркер %d завершил фазу %d\n", id, phase)
+
+				barrier.Wait()
+				fmt.Printf("воркер %d начинает фазу %d\n", id, phase+1)
+			}
+		}()
+	}
+
+	wg.Wait()
+	fmt.Println("Все фазы завершены")
+}

@@ -1,0 +1,75 @@
+// ============================================================
+// Задача: Tee Channel — раздвоение потока  🟡 Middle
+// ============================================================
+//
+// Реализуй аналог unix-команды `tee` для каналов:
+//
+//   func Tee[T any](done <-chan struct{}, in <-chan T) (<-chan T, <-chan T)
+//
+// Каждое значение из in должно попасть В ОБА выходных канала.
+// При закрытии in — оба выхода тоже закрываются.
+// При закрытии done — горутина Tee завершается без утечки.
+//
+// Важно: медленный читатель одного из выходов НЕ должен влиять на скорость
+// отправки в другой больше чем нужно — но при этом значение всё равно должно
+// попасть ОБА. Т.е. мы ждём пока оба прочитают текущее значение, потом читаем
+// следующее из in. (Это простейший вариант — без буфера.)
+//
+// Более продвинутый вариант (бонус):
+//   func TeeN[T any](done <-chan struct{}, in <-chan T, n int) []<-chan T
+//   раздвоение в N выходов.
+//
+// Проверь:
+//   go test -race -v ./...
+
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+// TODO: реализуй Tee
+// Подсказка: наивное "out1 <- v; out2 <- v" сериализует получателей.
+// Подумай как через select отправить в оба канала независимо
+// (поиск: "nil channel trick" если застрял).
+func Tee[T any](done <-chan struct{}, in <-chan T) (<-chan T, <-chan T) {
+	out1 := make(chan T)
+	out2 := make(chan T)
+	// TODO
+	return out1, out2
+}
+
+func main() {
+	done := make(chan struct{})
+	defer close(done)
+
+	source := make(chan int)
+	go func() {
+		defer close(source)
+		for i := 1; i <= 5; i++ {
+			source <- i
+		}
+	}()
+
+	a, b := Tee(done, source)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		for v := range a {
+			fmt.Println("A:", v)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for v := range b {
+			fmt.Println("B:", v)
+		}
+	}()
+
+	wg.Wait()
+	// Оба A и B должны получить 1,2,3,4,5
+}

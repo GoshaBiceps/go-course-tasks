@@ -1,106 +1,107 @@
-# go-course-tasks
+# Go Concurrency Tasks
 
-Задания из курса по Go. Каждое задание - отдельный модуль, можно запускать независимо.
+Задачи по конкурентности Go. Каждая задача — отдельный Go-модуль
+с подробным описанием, примерами и TODO-стабами.
+
+Уровни сложности: 🟢 Junior · 🟡 Middle · 🔴 Senior · ⚫ Expert
 
 ---
 
 ## Структура
 
+| # | Раздел | Тема | Задач |
+|---|--------|------|-------|
+| 01 | [channels](./01-channels/) | Каналы и горутины | 8 |
+| 02 | [sync](./02-sync/) | sync.Mutex, Once, Cond, атомики | 7 |
+| 03 | [patterns](./03-patterns/) | Паттерны конкурентности | 8 |
+| 04 | [classic](./04-classic/) | Классика | 7 |
+| 05 | [hard](./05-hard/) | Сложные задачи | 9 |
 
-```
-go-course-tasks/
-├── 01-intro/
-│   └── 1.1-setup/tasks/
-│       ├── task01-hello/         — первая программа, go run
-│       └── task02-workspace/     — go work, несколько модулей
-│
-├── 02-basics/
-│   ├── 2.1-variables/tasks/
-│   │   ├── task01/               — объявление переменных и типов
-│   │   └── task02/               — iota и перечисления
-│   ├── 2.2-control-flow/tasks/
-│   │   ├── task01/               — FizzBuzz через switch
-│   │   └── task02/               — подсчёт символов через for range
-│   ├── 2.3-collections/tasks/
-│   │   ├── task01/               — рост вместимости среза (len/cap)
-│   │   └── task02/               — инвертировать словарь
-│   ├── 2.4-functions/tasks/
-│   │   ├── task01/               — замер времени через defer
-│   │   └── task02/               — счётчик с состоянием (замыкание)
-│   └── 2.6-context/tasks/
-│       ├── task01/               — таймаут запроса
-│       └── task02/               — идентификатор запроса через контекст
-│
-├── 03-types/
-│   ├── 3.1-structs/              — структуры и композиция
-│   ├── 3.2-methods/              — методы и указатели
-│   ├── 3.3-interfaces/           — интерфейсы
-│   ├── 3.4-errors/               — обработка ошибок
-│   ├── 3.5-generics/             — дженерики
-│   └── 3.7-project/              — практическое задание
-│
-├── 04-concurrency/
-│   ├── 4.1-goroutines/tasks/
-│   │   ├── task01/               — параллельная обработка с WaitGroup
-│   │   └── task02/               — обнаружить и исправить гонку (-race)
-│   ├── 4.2-channels/tasks/
-│   │   ├── task01/               — Worker Pool
-│   │   └── task02/               — Fan-In: слить два канала
-│   ├── 4.3-sync/tasks/
-│   │   ├── task01/               — безопасный счётчик на Mutex
-│   │   └── task02/               — параллельные запросы с errgroup
-│   └── 4.4-iterators/tasks/
-│       ├── task01/               — итератор для стека
-│       └── task02/               — генератор чисел Фибоначчи
-│
-├── 05-infrastructure/
-│   ├── 5.1-http/                 — HTTP-сервер: net/http
-│   ├── 5.2-middleware/           — middleware: цепочка обработчиков
-│   ├── 5.3-data/                 — работа с данными
-│   ├── 5.4-observability/        — slog, метрики, трейсинг
-│   ├── 5.5-grpc/                 — Protobuf & gRPC
-│   └── 5.6-project/              — практическое задание
-│
-└── 06-architecture/
-    ├── 6.2-clean-arch/tasks/
-    │   └── task01/               — Repository + Service для товаров
-    └── 6.3-testing/tasks/
-        └── task01/               — табличные тесты и фаззинг парсера
-```
+**Итого: 39 задач**
+
+---
+
+## 01 · Channels
+
+| Задача | Описание | Уровень |
+|--------|----------|---------|
+| [task01 — Pipeline](./01-channels/task01/) | Числа → квадраты → фильтр чётных через канальный пайплайн | 🟢 |
+| [task02 — Fan-Out / Fan-In](./01-channels/task02/) | Распредели задачи по N воркеров, собери результаты | 🟡 |
+| [task03 — Done Channel](./01-channels/task03/) | Отмена цепочки горутин через done-канал | 🟡 |
+| [task04 — Timeout & Select](./01-channels/task04/) | Запросы к нескольким API, первый ответ выигрывает | 🟡 |
+| [task05 — Merge Channels](./01-channels/task05/) | Слить N каналов в один не теряя порядок закрытия | 🟡 |
+| [task06 — Bounded Generator](./01-channels/task06/) | Генератор с ограниченным буфером и backpressure | 🟡 |
+| [task07 — Ordered Pipeline](./01-channels/task07/) | Параллельная обработка с сохранением исходного порядка | 🟡 |
+| [task08 — Tee Channel](./01-channels/task08/) | Раздвоение канала в два получателя без потерь | 🟡 |
+
+## 02 · Sync
+
+| Задача | Описание | Уровень |
+|--------|----------|---------|
+| [task01 — RWMutex Cache](./02-sync/task01/) | Потокобезопасный TTL-кеш на RWMutex | 🟡 |
+| [task02 — Once Singleton](./02-sync/task02/) | Ленивая инициализация соединения с БД через sync.Once | 🟢 |
+| [task03 — Semaphore](./02-sync/task03/) | Взвешенный семафор с Acquire/Release | 🟡 |
+| [task04 — Barrier](./02-sync/task04/) | Барьер: все горутины ждут пока все дойдут до точки | 🟡 |
+| [task05 — Cond: очередь](./02-sync/task05/) | Блокирующая очередь через sync.Cond | 🔴 |
+| [task06 — TryLock Mutex](./02-sync/task06/) | Свой мьютекс с TryLock, LockTimeout, LockContext | 🟡 |
+| [task07 — Writer-priority RWMutex](./02-sync/task07/) | RWMutex с приоритетом писателей (без starvation) | 🔴 |
+
+## 03 · Patterns
+
+| Задача | Описание | Уровень |
+|--------|----------|---------|
+| [task01 — Worker Pool](./03-patterns/task01/) | Пул воркеров с Stop и StopNow | 🟡 |
+| [task02 — Rate Limiter](./03-patterns/task02/) | Token Bucket: с горутиной и ленивый | 🟡 |
+| [task03 — Pub/Sub](./03-patterns/task03/) | Брокер сообщений: подписки, топики, отписка | 🔴 |
+| [task04 — Future/Promise](./03-patterns/task04/) | Асинхронное вычисление с ожиданием и цепочкой Then | 🔴 |
+| [task05 — Singleflight](./03-patterns/task05/) | Дедупликация параллельных запросов к одному ключу | 🔴 |
+| [task06 — Errgroup](./03-patterns/task06/) | Аналог golang.org/x/sync/errgroup с лимитом | 🟡 |
+| [task07 — Circuit Breaker](./03-patterns/task07/) | Closed / Open / HalfOpen с метриками | 🔴 |
+| [task08 — Debounce & Throttle](./03-patterns/task08/) | Два близких паттерна ограничения вызовов | 🟡 |
+
+## 04 · Classic
+
+| Задача | Описание | Уровень |
+|--------|----------|---------|
+| [task01 — Dining Philosophers](./04-classic/task01/) | Обедающие философы без дедлока | 🔴 |
+| [task02 — Producer-Consumer](./04-classic/task02/) | Производитель-потребитель через каналы и через Cond | 🟡 |
+| [task03 — Print In Order](./04-classic/task03/) | Три горутины печатают строго в порядке 1→2→3 | 🟢 |
+| [task04 — FooBar](./04-classic/task04/) | Две горутины печатают "FooBar" по очереди | 🟢 |
+| [task05 — H2O](./04-classic/task05/) | Горутины-атомы формируют молекулы H2O | 🔴 |
+| [task06 — Cigarette Smokers](./04-classic/task06/) | Классическая задача Паттерсона | 🔴 |
+| [task07 — Readers-Writers](./04-classic/task07/) | Два варианта: reader-preferring и fair (FIFO) | 🔴 |
+
+## 05 · Hard
+
+| Задача | Описание | Уровень |
+|--------|----------|---------|
+| [task01 — Sharded Map](./05-hard/task01/) | Потокобезопасная map с шардированием | 🔴 |
+| [task02 — Deadlock Puzzles](./05-hard/task02/) | Найди и исправь четыре вида дедлоков и гонок | 🔴 |
+| [task03 — Connection Pool](./05-hard/task03/) | Пул соединений с таймаутами и health check | 🔴 |
+| [task04 — Scheduler](./05-hard/task04/) | Планировщик с приоритетами, зависимостями, дедлайнами | ⚫ |
+| [task05 — Concurrent LRU](./05-hard/task05/) | Потокобезопасный LRU-кеш O(1) | 🔴 |
+| [task06 — Actor Model](./05-hard/task06/) | Простая реализация модели акторов (Send / Ask) | ⚫ |
+| [task07 — Web Crawler](./05-hard/task07/) | Обход графа с лимитом горутин и дедупликацией | 🔴 |
+| [task08 — Retry Job Queue](./05-hard/task08/) | Очередь с экспоненциальным бэкоффом и DLQ | ⚫ |
+| [task09 — Parallel ForEach](./05-hard/task09/) | Дженерик-утилита с лимитом и отменой через ctx | 🟡 |
 
 ---
 
 ## Как запускать
 
-Каждое задание - отдельный Go-модуль. Переходи в папку и запускай:
-
 ```bash
-cd 02-basics/2.1-variables/tasks/task01
-go run main.go
-```
+cd 01-channels/task01
+go test -v ./...          # для тестов
+go run main.go            # для программ
 
-Для заданий с тестами:
-```bash
-cd 06-architecture/6.3-testing/tasks/task01
-go test -v ./...
-```
-
-Проверка на гонки:
-```bash
-cd 04-concurrency/4.1-goroutines/tasks/task02
-go run -race main.go
-```
-
-Задание с внешней зависимостью (errgroup):
-```bash
-cd 04-concurrency/4.3-sync/tasks/task02
-go get golang.org/x/sync
-go run main.go
+go test -race ./...       # всегда проверяй на гонки!
 ```
 
 ---
 
-## Как работать с заданиями
+## Советы
 
-Внутри каждого `main.go` есть комментарии `// TODO:` - они показывают что именно нужно реализовать. Описание задачи и ожидаемый вывод - в заголовке файла.
-
+- Каждый `main.go` содержит `// TODO:` — что нужно реализовать
+- Запускай с `-race` — многие баги видны только детектором гонок
+- Ожидаемый вывод указан в заголовке каждого файла
+- Тесты покрывают edge cases — сначала прочитай их

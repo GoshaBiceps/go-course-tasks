@@ -33,15 +33,15 @@ import (
 type H2O struct {
 	hSem chan struct{} // пропускает до 2 водородов
 	oSem chan struct{} // пропускает 1 кислород
-	bar  *barrier
+	bar  *barrier      // точка встерчи нескольких горутин
 }
 
 // barrier — встреча трёх горутин перед продолжением
 type barrier struct {
 	mu    sync.Mutex
-	cond  *sync.Cond
-	count int
-	total int
+	cond  *sync.Cond // будет использован broadcast будет будить все горутины
+	count int        // сколько уже пришло горутин
+	total int        // сколько всего ждем 3 горутины h2o
 }
 
 func newBarrier(n int) *barrier {
@@ -54,7 +54,14 @@ func newBarrier(n int) *barrier {
 // Подсказка: последний пришедший разбуждает всех, остальные ждут
 func (b *barrier) Wait() {
 	b.mu.Lock()
-	// TODO
+	b.count++
+
+	if b.count == b.total {
+		b.cond.Broadcast()
+	} else {
+		b.cond.Wait()
+	}
+
 	b.mu.Unlock()
 }
 
@@ -62,12 +69,21 @@ func (b *barrier) Wait() {
 // Подсказка: семафоры ограничивают сколько атомов каждого типа собирается в одну "встречу",
 // а барьер синхронизирует их — подумай какие ёмкости нужны для H и O
 func NewH2O() *H2O {
-	return &H2O{}
+	return &H2O{
+		hSem: make(chan struct{}, 2), //  две молекулу  hh
+		oSem: make(chan struct{}, 1), // одна молекула o
+		bar:  newBarrier(3)}          // барьер ждущий три горутины
 }
 
 // TODO: реализуй Hydrogen
 func (w *H2O) Hydrogen(fn func()) {
-	// TODO
+	w.hSem <- struct{}{}
+
+	fn()
+
+	w.bar.Wait()
+
+	<-w.hSem
 }
 
 // TODO: реализуй Oxygen

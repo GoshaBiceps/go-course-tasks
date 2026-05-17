@@ -88,7 +88,13 @@ func (w *H2O) Hydrogen(fn func()) {
 
 // TODO: реализуй Oxygen
 func (w *H2O) Oxygen(fn func()) {
-	// TODO
+	w.oSem <- struct{}{}
+
+	fn()
+
+	w.bar.Wait()
+
+	<-w.oSem
 }
 
 // === Тесты ===

@@ -50,7 +50,10 @@ type Generator struct {
 // TODO: реализуй NewGenerator
 func NewGenerator(bufSize int) *Generator {
 	// TODO: создай Generator с буферизованным ch и каналом-сигналом closed
-	return nil
+	return &Generator{
+		ch:     make(chan int, bufSize),
+		closed: make(chan struct{}),
+	}
 }
 
 // TODO: реализуй Send
@@ -59,7 +62,19 @@ func NewGenerator(bufSize int) *Generator {
 // Если Generator закрыт — сразу возвращает false.
 func (g *Generator) Send(v int) bool {
 	// TODO: три сценария: успешная отправка, таймаут, генератор закрыт — каждый должен обновлять статистику
-	return false
+	select {
+	case g.ch <- v:
+		g.sent.Add(1)
+		return true
+
+	case <-g.closed:
+		g.dropped.Add(1)
+		return false
+
+	case <-time.After(sendTimeout):
+		g.dropped.Add(1)
+		return false
+	}
 }
 
 // Chan возвращает канал для чтения данных
@@ -70,6 +85,10 @@ func (g *Generator) Chan() <-chan int {
 // TODO: реализуй Close — закрой closed канал через sync.Once, закрой ch
 func (g *Generator) Close() {
 	// TODO: закрытие должно быть безопасным при параллельных вызовах
+	g.once.Do(func() {
+		close(g.closed)
+		close(g.ch)
+	})
 }
 
 // Stats возвращает статистику

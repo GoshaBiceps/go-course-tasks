@@ -55,38 +55,79 @@ func NewTTLCache[K comparable, V any](ttl time.Duration) *TTLCache[K, V] {
 func (c *TTLCache[K, V]) Set(key K, value V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// TODO
+
+	c.items[key] = entry[V]{
+		value:  value,
+		expiry: time.Now().Add(c.ttl),
+	}
 }
 
 // TODO: реализуй Get — возвращает значение если оно есть и не устарело
 // Подсказка: Get в основном читает — подумай какой Lock подойдёт
 // Отдельный вопрос: что делать если нашли устаревшую запись? Можно ли её удалить здесь?
 func (c *TTLCache[K, V]) Get(key K) (V, bool) {
-	// TODO
-	var zero V
-	return zero, false
+	c.mu.RLock()
+	//defer c.mu.RUnlock()
+
+	item, ok := c.items[key]
+	if !ok {
+		c.mu.RUnlock()
+
+		var zero V
+		return zero, false
+	}
+
+	if time.Now().After(item.expiry) {
+		c.mu.RUnlock()
+
+		c.mu.Lock()
+		delete(c.items, key)
+		c.mu.Unlock()
+
+		var zero V
+		return zero, false
+	}
+
+	c.mu.RUnlock()
+
+	return item.value, true
 }
 
 // TODO: реализуй Delete
 func (c *TTLCache[K, V]) Delete(key K) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// TODO
+
+	delete(c.items, key)
 }
 
 // TODO: реализуй Len — количество ЖИВЫХ (не устаревших) записей
 func (c *TTLCache[K, V]) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	// TODO
-	return 0
+
+	count := 0
+
+	for _, item := range c.items {
+		if time.Now().Before(item.expiry) {
+			count++
+		}
+	}
+
+	return count
 }
 
 // TODO: реализуй Cleanup — удаляет все устаревшие записи
 func (c *TTLCache[K, V]) Cleanup() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// TODO
+
+	for key, item := range c.items {
+		if time.Now().After(item.expiry) {
+			delete(c.items, key)
+		}
+	}
+
 }
 
 func main() {

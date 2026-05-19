@@ -52,27 +52,88 @@ type Actor[S any] struct {
 // TODO: реализуй NewActor
 // Подсказка: запусти run() в горутине — она обрабатывает все сообщения последовательно
 func NewActor[S any](initial S) *Actor[S] {
-	return nil
+	a := &Actor[S]{
+		state:   initial,
+		mailbox: make(chan message[S], 128),
+		done:    make(chan struct{}),
+	}
+
+	go a.run()
+
+	return a
 }
 
 // TODO: реализуй run — бесконечный цикл обработки сообщений из mailbox
 // Подсказка: message может быть двух видов (fn или ask) — для ask нужно отправить результат в replyCh
 // Цикл должен завершаться при закрытии a.done
 func (a *Actor[S]) run() {
-	// TODO
+	for {
+		select {
+
+		// actor остановили
+		case <-a.done:
+			return
+
+		// пришло сообщение
+		case msg := <-a.mailbox:
+
+			// обычная команда
+			if msg.fn != nil {
+				msg.fn(&a.state)
+			}
+
+			// запрос с ответом
+			if msg.ask != nil {
+				result := msg.ask(&a.state)
+
+				msg.replyCh <- result
+			}
+		}
+	}
 }
 
 // TODO: реализуй Send — fire-and-forget; учитывай что actor может быть остановлен
 func (a *Actor[S]) Send(fn func(state *S)) {
+	msg := message[S]{
+		fn: fn,
+	}
+
+	select {
+
+	// actor работает
+	case a.mailbox <- msg:
+
+	// actor остановлен
+	case <-a.done:
+		return
+	}
 }
 
 // TODO: реализуй Ask — запрос с ожиданием ответа
 func (a *Actor[S]) Ask(fn func(state *S) any) any {
-	return nil
+
+	replyCh := make(chan any)
+
+	msg := message[S]{
+		ask:     fn,
+		replyCh: replyCh,
+	}
+
+	select {
+
+	case a.mailbox <- msg:
+	case <-a.done:
+		return nil
+	}
+
+	return <-replyCh
 }
 
 // TODO: реализуй Stop
 func (a *Actor[S]) Stop() {
+	a.once.Do(func() {
+		close(a.done)
+	})
 }
 
 // === Пример: Банковский счёт без мьютекса ===

@@ -64,28 +64,75 @@ func (m *ShardedMap[K, V]) shardFor(key K) *shard[K, V] {
 
 // TODO: реализуй Set
 func (m *ShardedMap[K, V]) Set(key K, value V) {
+	s := m.shardFor(key)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.items[key] = value
 }
 
 // TODO: реализуй Get — подумай какой тип блокировки уместен для чтения
 func (m *ShardedMap[K, V]) Get(key K) (V, bool) {
-	var zero V
-	return zero, false
+	s := m.shardFor(key)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	value, ok := s.items[key]
+
+	return value, ok
 }
 
 // TODO: реализуй Delete
 func (m *ShardedMap[K, V]) Delete(key K) {
+	s := m.shardFor(key)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.items, key)
 }
 
 // TODO: реализуй Len — сумма размеров всех шардов
 func (m *ShardedMap[K, V]) Len() int {
-	return 0
+	total := 0
+
+	for _, s := range m.shards {
+		s.mu.RLock()
+
+		total += len(s.items)
+
+		s.mu.RUnlock()
+	}
+
+	return total
+
 }
 
 // TODO: реализуй Range — обходит все элементы всех шардов
 // fn возвращает false — прерывает обход
 // Подсказка: не держи мьютекс во время вызова fn (fn может быть медленной или вызывать Set/Delete на той же map)
 func (m *ShardedMap[K, V]) Range(fn func(K, V) bool) {
-	// TODO
+
+	for _, s := range m.shards {
+		s.mu.RLock()
+
+		items := make(map[K]V)
+
+		for k, v := range s.items {
+			items[k] = v
+		}
+
+		s.mu.RUnlock()
+
+		for k, v := range items {
+			if !fn(k, v) {
+				return
+			}
+		}
+	}
+
 }
 
 func main() {

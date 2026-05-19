@@ -59,6 +59,16 @@ func (q *BlockingQueue[T]) Put(item T) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	// TODO: жди пока есть место, учитывай состояние closed
+	for len(q.items) == q.cap && !q.closed {
+		q.notFull.Wait()
+	}
+
+	if q.closed {
+		return
+	}
+
+	q.items = append(q.items, item)
+	q.notEmpty.Signal()
 }
 
 // TODO: реализуй Take — блокируется пока len(items) == 0
@@ -66,18 +76,118 @@ func (q *BlockingQueue[T]) Take() (zero T) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	// TODO: жди пока есть что читать, учитывай состояние closed
-	return zero
+
+	for len(q.items) == 0 && !q.closed {
+		q.notEmpty.Wait()
+	}
+
+	if len(q.items) == 0 && q.closed {
+		return zero
+	}
+
+	item := q.items[0]
+
+	q.items = q.items[1:]
+	q.notFull.Signal()
+
+	return item
 }
 
 // TODO: реализуй PutTimeout
 // Подсказка: нужен способ принудительно разбудить заблокированных по истечению таймаута
 func (q *BlockingQueue[T]) PutTimeout(item T, d time.Duration) bool {
-	return false
+	deadline := time.Now().Add(d)
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	// Отдельная goroutine:
+	// через timeout будит waiting producer-ов
+	go func() {
+		time.Sleep(d)
+
+		q.mu.Lock()
+		defer q.mu.Unlock()
+
+		q.notFull.Broadcast()
+	}()
+
+	// Пока очередь полная и не закрыта —
+	// ждём место
+	for len(q.items) == q.cap && !q.closed {
+
+		// Проверяем:
+		// timeout уже вышел?
+		if time.Now().After(deadline) {
+			return false
+		}
+
+		// Засыпаем
+		q.notFull.Wait()
+	}
+
+	// Если очередь закрыли —
+	// писать больше нельзя
+	if q.closed {
+		return false
+	}
+
+	// Кладём элемент
+	q.items = append(q.items, item)
+
+	// Будим consumer-а:
+	// очередь теперь не пустая
+	q.notEmpty.Signal()
+
+	return true
 }
 
 // TODO: реализуй TakeTimeout аналогично PutTimeout
 func (q *BlockingQueue[T]) TakeTimeout(d time.Duration) (zero T, ok bool) {
-	return zero, false
+	deadline := time.Now().Add(d)
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	// Таймер будит waiting consumer-ов
+	go func() {
+		time.Sleep(d)
+
+		q.mu.Lock()
+		defer q.mu.Unlock()
+
+		q.notEmpty.Broadcast()
+	}()
+
+	// Пока очередь пустая и не закрыта —
+	// ждём данные
+	for len(q.items) == 0 && !q.closed {
+
+		// Timeout вышел?
+		if time.Now().After(deadline) {
+			return zero, false
+		}
+
+		// Засыпаем
+		q.notEmpty.Wait()
+	}
+
+	// Очередь закрыта и пуста
+	if len(q.items) == 0 && q.closed {
+		return zero, false
+	}
+
+	// Берём первый элемент
+	item := q.items[0]
+
+	// Удаляем его из очереди
+	q.items = q.items[1:]
+
+	// Будим producer-а:
+	// место появилось
+	q.notFull.Signal()
+
+	return item, true
 }
 
 func (q *BlockingQueue[T]) Len() int {
@@ -90,7 +200,13 @@ func (q *BlockingQueue[T]) Len() int {
 // Подсказка: у sync.Cond есть разные способы пробуждения — выбери подходящий
 // для ситуации "заблокированных может быть много, и все должны проснуться"
 func (q *BlockingQueue[T]) Close() {
-	// TODO
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	q.closed = true
+
+	q.notFull.Broadcast()
+	q.notEmpty.Broadcast()
 }
 
 func main() {

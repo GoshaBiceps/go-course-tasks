@@ -64,6 +64,16 @@ func (p *Philosopher) eat(wg *sync.WaitGroup, stop <-chan struct{}) {
 
 		// TODO: берём вилки (без дедлока!)
 		// Подсказка: дедлок возникает когда все хватают вилки в одном порядке
+		firstFork := p.leftFork
+		secondFork := p.rightFork
+
+		if p.id%2 == 1 {
+			firstFork = p.rightFork
+			secondFork = p.leftFork
+		}
+
+		firstFork.Lock()
+		secondFork.Lock()
 
 		// Едим
 		p.timesEaten++
@@ -71,6 +81,8 @@ func (p *Philosopher) eat(wg *sync.WaitGroup, stop <-chan struct{}) {
 		time.Sleep(time.Duration(rand.Intn(50)) * time.Millisecond)
 
 		// TODO: кладём вилки
+		secondFork.Unlock()
+		firstFork.Unlock()
 	}
 }
 

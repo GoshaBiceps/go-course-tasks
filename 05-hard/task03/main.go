@@ -98,16 +98,144 @@ func NewPool(maxConn int, factory func() (Conn, error)) *Pool {
 // Подсказка: три сценария: idle есть, можно создать, нужно ждать
 // Отмена ctx должна разбудить ожидающего — подумай как
 func (p *Pool) Acquire(ctx context.Context) (Conn, error) {
-	return nil, ErrPoolClosed
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for {
+		if p.closed { // проверка  можно выдать соединение или нет
+			return nil, ErrPoolClosed
+		}
+
+		// 1. Есть свободное соединение
+		if len(p.idle) > 0 {
+			n := len(p.idle) - 1
+			conn := p.idle[n]
+			p.idle = p.idle[:n]
+
+			// health check
+			if conn.Ping() != nil {
+				conn.Close()
+				continue
+			}
+
+			p.inUse++
+			p.acquired.Add(1)
+			return conn, nil
+		}
+
+		// 2. Можно создать новое соединение
+		if p.inUse < p.maxConn {
+			p.inUse++
+
+			p.mu.Unlock()
+			conn, err := p.factory()
+			p.mu.Lock()
+
+			if err != nil {
+				p.inUse--
+				p.cond.Signal()
+				return nil, err
+			}
+
+			p.acquired.Add(1)
+			return conn, nil
+		}
+
+		// 3. Всё занято — ждём
+		done := make(chan struct{})
+
+		go func() {
+			select {
+			case <-ctx.Done():
+				p.mu.Lock()
+				p.cond.Broadcast()
+				p.mu.Unlock()
+			case <-done:
+			}
+		}()
+
+		p.cond.Wait()
+		close(done)
+
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+	}
 }
 
 // TODO: реализуй Release
 // Подсказка: после возврата нужно разбудить ожидающего
 func (p *Pool) Release(conn Conn) {
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// pool уже закрыт
+	if p.closed {
+
+		// conn больше не нужен
+		conn.Close()
+
+		p.inUse--
+
+		p.released.Add(1)
+
+		// будим waiting goroutine
+		p.cond.Broadcast()
+
+		return
+	}
+
+	// conn снова становится idle
+	p.idle = append(p.idle, conn)
+
+	// conn больше не используется
+	p.inUse--
+
+	// статистика release
+	p.released.Add(1)
+
+	// будим одну waiting goroutine
+	p.cond.Signal()
 }
 
 // TODO: реализуй Close
 func (p *Pool) Close() {
+
+	p.mu.Lock()
+
+	// уже закрыт
+	if p.closed {
+		p.mu.Unlock()
+		return
+	}
+
+	// помечаем pool как closed
+	p.closed = true
+
+	// закрываем все idle conn
+	for _, conn := range p.idle {
+		conn.Close()
+	}
+
+	// idle больше нет
+	p.idle = nil
+
+	// будим все waiting goroutine
+	p.cond.Broadcast()
+
+	// ждём пока вернутся все inUse conn
+	for p.inUse > 0 {
+
+		// Wait:
+		// - отпускает mutex
+		// - goroutine засыпает
+		// - после Signal/Broadcast
+		//   снова захватывает mutex
+		p.cond.Wait()
+	}
+
+	p.mu.Unlock()
 }
 
 func (p *Pool) Stats() PoolStats {

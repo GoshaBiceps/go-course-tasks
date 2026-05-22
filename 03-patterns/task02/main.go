@@ -42,13 +42,52 @@ type TokenBucket struct {
 // TODO: реализуй NewTokenBucket
 // Подсказка: фоновая горутина добавляет токены с нужной частотой; начинай с полным ведром
 func NewTokenBucket(rate float64, capacity int64) *TokenBucket {
-	return nil
+
+	tb := &TokenBucket{
+		capacity: capacity,
+		quit:     make(chan struct{}),
+	}
+
+	tb.tokens.Store(capacity) // стартуем сразу с токенами
+
+	interval := time.Duration(float64(time.Second) / rate)
+	ticker := time.NewTicker(interval) // создали структуру тикер , у нее есть поле с каналом  C
+
+	go func() {
+		for {
+			select {
+			case <-ticker.C: // канал таймера; каждые interval  отправляет сигнал .
+
+				current := tb.tokens.Load()
+
+				if current < tb.capacity {
+					tb.tokens.Add(1)
+				}
+			case <-tb.quit:
+				return
+			}
+		}
+
+	}()
+	return tb
 }
 
 // TODO: Allow забирает 1 токен. Возвращает false если ведро пусто.
 // Подсказка: операция должна быть потокобезопасной без мьютекса
 func (tb *TokenBucket) Allow() bool {
-	return false
+
+	for {
+		currency := tb.tokens.Load()
+
+		if currency <= 0 {
+			return false
+		}
+
+		if tb.tokens.CompareAndSwap(currency, currency-1) {
+			return true
+		}
+
+	}
 }
 
 func (tb *TokenBucket) Close() { close(tb.quit) }
@@ -65,7 +104,13 @@ type LazyTokenBucket struct {
 
 // TODO: реализуй NewLazyTokenBucket
 func NewLazyTokenBucket(rate, capacity float64) *LazyTokenBucket {
-	return nil
+
+	return &LazyTokenBucket{
+		tokens:     capacity,   // текущее количество токенов
+		capacity:   capacity,   //максимальный размер бакета
+		rate:       rate,       // токенов в секунду
+		lastRefill: time.Now(), // когда последний раз подсчитывали бакет
+	}
 }
 
 // TODO: реализуй Allow для LazyTokenBucket
@@ -73,7 +118,20 @@ func NewLazyTokenBucket(rate, capacity float64) *LazyTokenBucket {
 func (lb *LazyTokenBucket) Allow() bool {
 	lb.mu.Lock()
 	defer lb.mu.Unlock()
-	return false
+
+	elapsed := time.Since(lb.lastRefill).Seconds() //  считет сколько прошло секунд с полседнего  refil
+
+	refill := elapsed * lb.rate                    //   вычисляем сколько токенов накопилось
+	lb.tokens = min(lb.capacity, lb.tokens+refill) // добавляем токены
+	lb.lastRefill = time.Now()
+
+	if lb.tokens < 1 {
+		return false
+	}
+
+	lb.tokens--
+
+	return true
 }
 
 func min(a, b float64) float64 {

@@ -38,29 +38,86 @@ import (
 // Подсказка: оба направления — чтение и запись — должны учитывать отмену
 func withDone(done <-chan struct{}, in <-chan int) <-chan int {
 	out := make(chan int)
+
 	go func() {
 		defer close(out)
-		// TODO
+
+		for {
+			select {
+
+			// pipeline отменили
+			case <-done:
+				return
+
+			// читаем из входного канала
+			case v, ok := <-in:
+
+				// входной канал закрыт
+				if !ok {
+					return
+				}
+
+				// пытаемся отправить дальше
+				select {
+
+				// pipeline отменили
+				case <-done:
+					return
+
+				// отправляем значение
+				case out <- v:
+				}
+			}
+		}
 	}()
+
 	return out
 }
 
 func generate(done <-chan struct{}, nums ...int) <-chan int {
 	out := make(chan int)
+
 	go func() {
 		defer close(out)
-		// TODO: защити отправку каждого числа от блокировки при отмене
+
+		for _, n := range nums {
+
+			select {
+
+			// отмена pipeline
+			case <-done:
+				return
+
+			// отправляем число
+			case out <- n:
+			}
+		}
 	}()
+
 	return out
 }
 
 // TODO: реализуй square с поддержкой отмены через done
 func square(done <-chan struct{}, in <-chan int) <-chan int {
 	out := make(chan int)
+
 	go func() {
 		defer close(out)
-		// TODO: аналогично generate, но читаем из канала, а не из среза
+
+		for v := range in {
+
+			select {
+
+			// pipeline отменили
+			case <-done:
+				return
+
+			// отправляем квадрат
+			case out <- v * v:
+			}
+		}
 	}()
+
 	return out
 }
 

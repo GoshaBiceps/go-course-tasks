@@ -21,7 +21,7 @@
 //   - map[K]*node для O(1) доступа
 //   - Get перемещает узел в начало списка
 //   - Put: если ключ есть — обновить и переместить в начало
-//           если нет — добавить в начало, если len > cap — удалить хвост
+//           если нет — добавить в начало, если len > cap — удалить хвостz
 //
 // Проверь:
 //   go test -race -v ./...
@@ -58,14 +58,75 @@ func NewLRUCache[K comparable, V any](capacity int) *LRUCache[K, V] {
 // TODO: реализуй Get
 // Подсказка: чтение тоже требует записи — подумай почему
 func (c *LRUCache[K, V]) Get(key K) (V, bool) {
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	var zero V
-	return zero, false
+
+	elem, ok := c.items[key]
+	if !ok {
+		return zero, false
+	}
+
+	// двигаем элемент в начало списка
+	c.list.MoveToFront(elem)
+
+	ent := elem.Value.(entry[K, V])
+
+	return ent.value, true
 }
 
 // TODO: реализуй Put
 // Подсказка: если ключ уже есть — обнови и повысь в приоритете;
 // если переполнено — вытесни least-recently-used
 func (c *LRUCache[K, V]) Put(key K, value V) {
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// ключ уже есть
+	if elem, ok := c.items[key]; ok {
+
+		// обновляем value
+		elem.Value = entry[K, V]{
+			key:   key,
+			value: value,
+		}
+
+		// делаем элемент самым свежим
+		c.list.MoveToFront(elem)
+
+		return
+	}
+
+	// создаём новый элемент
+	elem := c.list.PushFront(entry[K, V]{
+		key:   key,
+		value: value,
+	})
+
+	// сохраняем указатель на node списка
+	c.items[key] = elem
+
+	// проверяем переполнение cache
+	if c.list.Len() > c.cap {
+
+		// берём самый старый элемент
+		last := c.list.Back()
+
+		if last != nil {
+
+			// получаем entry
+			ent := last.Value.(entry[K, V])
+
+			// удаляем из map
+			delete(c.items, ent.key)
+
+			// удаляем из linked list
+			c.list.Remove(last)
+		}
+	}
 }
 
 func (c *LRUCache[K, V]) Len() int {

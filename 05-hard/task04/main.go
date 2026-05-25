@@ -28,6 +28,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -83,8 +84,18 @@ type Scheduler struct {
 // Подсказка: проинициализируй поля (tasks, jobs, done) и запусти workers горутин s.worker()
 // Не забудь про s.wg чтобы Shutdown мог дождаться завершения
 func NewScheduler(workers int) *Scheduler {
-	// TODO
-	return nil
+	s := &Scheduler{
+		tasks:   make(map[TaskID]*taskState), // хранит все задачи
+		workers: workers,                     // наши горутинки
+		jobs:    make(chan *taskState),       // очередь задачь для workers
+		done:    make(chan struct{}),         // сигнал завершения работы
+	}
+
+	for i := 0; i < workers; i++ { //  запускаем наши. горутины
+		s.wg.Add(1)
+		go s.worker()
+	}
+	return s
 }
 
 // TODO: реализуй worker — читает из s.jobs, запускает ts.task.Fn(ts.ctx)
@@ -93,18 +104,135 @@ func NewScheduler(workers int) *Scheduler {
 // И реагируй на s.done чтобы выйти при Shutdown
 func (s *Scheduler) worker() {
 	defer s.wg.Done()
-	// TODO
+	for {
+		select {
+		case <-s.done:
+			return
+		case ts := <-s.jobs:
+			// запускаем задачи (обработка)
+			err := ts.task.Fn(ts.ctx)
+
+			ts.err = err //  сохранили ошибку
+			// обновляем статистику
+			if ts.ctx.Err() != nil { // контекст отмена
+				atomic.AddInt64(&s.stats.Cancelled, 1)
+			} else if err != nil { // файловая ошибка
+				atomic.AddInt64(&s.stats.Failed, 1)
+			} else { // прошло успешно
+				atomic.AddInt64(&s.stats.Completed, 1)
+			}
+
+			close(ts.done)
+		}
+	}
 }
 
 // TODO: реализуй Schedule
 // Подсказка: если есть DependsOn — жди зависимости асинхронно; Deadline — через context
 func (s *Scheduler) Schedule(task Task) TaskID {
-	return 0
+
+	id := TaskID(s.nextID.Add(1)) // создаем новый уникальный id задачи
+
+	ctx := context.Background()   // создали контекст
+	var cancel context.CancelFunc // объявили но не проиницилизировали
+
+	if !task.Deadline.IsZero() {
+		ctx, cancel = context.WithDeadline(ctx, task.Deadline) // если у задачи есть дедлайн , создаем контекст с отменой по времени
+	} else {
+		ctx, cancel = context.WithCancel(ctx) // отмена контекста вручную  если у задачи нет дедлайна
+	}
+
+	task.ID = id // это новый уникальный айди задачи  который сгенерили выше
+
+	ts := &taskState{ // это описание задачи (живое состояние выполнения)
+		task:     task,
+		ctx:      ctx,
+		cancel:   cancel,
+		done:     make(chan struct{}),
+		queuedAt: time.Now(),
+	}
+
+	s.mu.Lock()
+	s.tasks[id] = ts // кладем задачу в общую мап с мьютексом потому что она не потоко безопасна
+	s.mu.Unlock()
+
+	if len(task.DependsOn) > 0 { //
+		go func() {
+			for _, depID := range task.DependsOn { // идем по слайсу задач
+				if err := s.Wait(depID); err != nil { // ждем пока dependens завершится , или вернет ошибку
+					ts.err = err                           // ошибку записываем в нашу  стркутуру состояния
+					cancel()                               // отмена контекста
+					close(ts.done)                         // закрытие канала
+					atomic.AddInt64(&s.stats.Cancelled, 1) // записываем в отменненый контекст
+					return
+				}
+			}
+
+			s.enqueue(ts) // кладем в очередь воркеров
+		}()
+	} else {
+		s.enqueue(ts)
+	}
+
+	return id
+}
+
+// очередь воркеров 
+func (s *Scheduler) enqueue(ts *taskState) {  // принимает состояние задачи 
+	s.mu.Lock() // работаем с общим состоянием 
+	defer s.mu.Unlock()
+
+	select {
+	case <-s.done:
+		ts.cancel() // отмена контексата 
+		ts.err = context.Canceled // если есть ошибка пишем задача отменена 
+		close(ts.done) // закрываем канал 
+		atomic.AddInt64(&s.stats.Cancelled, 1) // увиличиваем счетчик 
+		return // выходим из  метода 
+	default: // если  все гуд идем дальше 
+	}
+
+	s.queue = append(s.queue, ts) // добавляем задачи в очередь 
+
+	sort.Slice(s.queue, func(i, j int) bool { // сортирует слайс 
+		return s.queue[i].task.Priority > s.queue[j].task.Priority // перестраивает очередь по приоритету 
+	})
+ 
+	next := s.queue[0] // первая задача из очереди 
+	s.queue = s.queue[1:] // удаляем первый элемент из очереди 
+
+	select {
+	case s.jobs <- next:
+	case <-s.done:
+		next.cancel() // отменяем контекст 
+		next.err = context.Canceled  // записываем ошибку 
+		close(next.done) // закрываем канал 
+		atomic.AddInt64(&s.stats.Cancelled, 1)
+	}
 }
 
 // TODO: реализуй Cancel
 func (s *Scheduler) Cancel(id TaskID) bool {
-	return false
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ts, ok := s.tasks[id]
+	if !ok {
+		return false
+	}
+
+	// task уже завершена
+	select {
+	case <-ts.done:
+		return false
+	default:
+	}
+
+	// отменяем context task
+	ts.cancel()
+
+	return true
 }
 
 // Wait блокируется до завершения задачи
@@ -123,7 +251,12 @@ func (s *Scheduler) Wait(id TaskID) error {
 // Подсказка: закрытие s.done сигнализирует всем воркерам о выходе
 // Не закрывай s.jobs — в него могут писать горутины зависимостей
 func (s *Scheduler) Shutdown() {
-	// TODO
+
+	// сигнал всем worker goroutine завершиться
+	close(s.done)
+
+	// ждём завершения всех workers
+	s.wg.Wait()
 }
 
 func (s *Scheduler) Stats() Stats {

@@ -1,5 +1,4 @@
-// Задание: Path-параметры
-//
+// Задание: Path-параметры //
 // Добавь маршрут GET /api/v1/users/{id}, который возвращает JSON с user_id.
 //
 // Ожидаемый результат:
@@ -34,7 +33,13 @@ func main() {
 	// Обработчик должен:
 	//   1. Достать id через r.PathValue("id")
 	//   2. Вернуть JSON {"user_id":"<id>"} со статусом 200
-	// Подсказка: mux.HandleFunc("GET /api/v1/users/{id}", func(...) { ... })
+	// Подсказ
+	mux.HandleFunc("GET /api/v1/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+
+		writeJSON(w, http.StatusOK, userResponse{UserID: id})
+
+	})
 
 	log.Println("server started on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {

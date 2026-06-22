@@ -28,8 +28,15 @@ func main() {
 	//   1. Установить статус 200 (http.StatusOK)
 	//   2. Записать в тело ответа строку "ok"
 	// Подсказка: mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { ... })
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
 
 	// TODO: запусти сервер на :8080 с помощью http.ListenAndServe(":8080", mux)
 	log.Println("server started on :8080")
-	_ = mux
+	if err := http.ListenAndServe(":8080", mux); err != nil {
+		log.Fatal(err) // обработка ошибки
+	}
+
 }

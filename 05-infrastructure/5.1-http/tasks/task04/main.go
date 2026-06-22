@@ -34,11 +34,20 @@ func main() {
 	//   IdleTimeout:       ... // время простоя keep-alive соединения
 	//
 	// Рекомендуемые значения для старта: 5s / 10s / 10s / 60s
-
+	server := http.Server{
+		Addr:              ":8080",
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,  // время на чтение загловка
+		ReadTimeout:       10 * time.Second, // время на чтение всего запроса
+		WriteTimeout:      10 * time.Second, // время на отправку ответа клиенту
+		IdleTimeout:       60 * time.Second, // сколько держим keep-alive сединение
+	}
 	// TODO: запусти сервер через srv.ListenAndServe()
 	// и обработай ошибку
 
-	_ = time.Second // убери после реализации
-
 	log.Println("server started on :8080")
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("listen: %v", err)
+	}
 }

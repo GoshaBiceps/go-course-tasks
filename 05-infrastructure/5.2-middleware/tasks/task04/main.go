@@ -58,7 +58,7 @@ func extractBearerToken(header string) (string, error) {
 	if header == "" {
 		return "", errors.New("authorization header is empty")
 	}
-	token, ok := strings.CutPrefix(header, "Bearer ")
+	token, ok := strings.CutPrefix(header, "Bearer ") // проверяет начинается ли строка с Bearer и отрезает  его и возвращает остаток
 	if !ok || token == "" {
 		return "", errors.New("invalid authorization header format")
 	}
@@ -74,21 +74,47 @@ func extractBearerToken(header string) (string, error) {
 //   5. Передать управление следующему обработчику с обновлённым request
 
 func AuthMiddleware(verifier TokenVerifier) func(http.Handler) http.Handler {
-	// TODO: implement
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
+			raw := r.Header.Get("Authorization") // достоем занчение из hedera
+
+			token, err := extractBearerToken(raw) // достаем чистый токен
+			if err != nil {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{
+					"error": err.Error(),
+				})
+				return
+			}
+
+			claims, err := verifier.Verify(token) // проверяем токен
+			if err != nil {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{
+					"error": err.Error(),
+				})
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), claimsKey, claims)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
 func meHandler(w http.ResponseWriter, r *http.Request) {
 	// TODO: достань claims из context:
-	//   claims, ok := r.Context().Value(claimsKey).(Claims)
-	// Если ok — верни JSON с UserID и Role
-	// Иначе — верни 401
-	_ = context.Background // подсказка: используй r.Context()
-	fmt.Fprintln(w, "TODO: implement me")
+	claims, ok := r.Context().Value(claimsKey).(Claims)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "claims not found",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"user_id": claims.UserID,
+		"role":    claims.Role,
+	})
 }
 
 func main() {

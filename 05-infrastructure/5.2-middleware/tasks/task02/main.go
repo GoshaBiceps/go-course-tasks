@@ -36,26 +36,46 @@ func Chain(h http.Handler, middlewares ...Middleware) http.Handler {
 
 // TODO: определи структуру statusRecorder, которая оборачивает http.ResponseWriter
 // и запоминает HTTP-статус ответа.
-//
-// type statusRecorder struct {
-//     http.ResponseWriter
-//     status int
-// }
-//
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
 // TODO: переопредели метод WriteHeader у statusRecorder
-// func (r *statusRecorder) WriteHeader(status int) { ... }
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status                    // cохранили себе
+	r.ResponseWriter.WriteHeader(status) // отправили статус клиенту
+}
 
 // TODO: реализуй LoggingMiddleware
-// func LoggingMiddleware(logger *slog.Logger) Middleware {
-//     return func(next http.Handler) http.Handler {
-//         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-//             1. Запомни время начала: start := time.Now()
-//             2. Создай statusRecorder с начальным статусом 200
-//             3. Вызови next.ServeHTTP(rec, r)
-//             4. Залогируй: method, path, status, duration_ms
-//         })
-//     }
-// }
+func LoggingMiddleware(logger *slog.Logger) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			//             1. Запомни время начала: start := time.Now()
+			//             2. Создай statusRecorder с начальным статусом 200
+			//             3. Вызови next.ServeHTTP(rec, r)
+			//             4. Залогируй: method, path, status, duration_ms
+			start := time.Now()
+
+			rec := &statusRecorder{
+				status:         http.StatusOK,
+				ResponseWriter: w,
+			}
+
+			next.ServeHTTP(rec, r)
+
+			duration := time.Since(start)
+
+			logger.Info(
+				"http request",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", rec.status,
+				"duration_ms", duration.Milliseconds(),
+			)
+		})
+	}
+}
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
@@ -68,12 +88,8 @@ func main() {
 	mux := http.NewServeMux()
 
 	// TODO: оберни healthHandler в LoggingMiddleware и зарегистрируй на "GET /health"
-	// health := Chain(http.HandlerFunc(healthHandler), LoggingMiddleware(logger))
-	// mux.Handle("GET /health", health)
-
-	_ = logger // убери после реализации
-	_ = time.Now
-	_ = mux
+	health := Chain(http.HandlerFunc(healthHandler), LoggingMiddleware(logger))
+	mux.Handle("GET /health", health)
 
 	fmt.Println("server started on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {

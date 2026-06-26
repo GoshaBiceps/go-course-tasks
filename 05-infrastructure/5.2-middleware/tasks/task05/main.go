@@ -35,8 +35,11 @@ type TokenVerifier interface {
 type JWTVerifier struct{}
 
 func (v *JWTVerifier) Verify(token string) (Claims, error) {
-	// TODO: implement
-	return Claims{}, nil
+	if token != "jwt-valid" {
+		return Claims{}, errors.New("jwt: unknown token")
+	}
+
+	return Claims{UserID: "user-jwt", Role: "user"}, nil
 }
 
 // TODO: реализуй PasetoVerifier (мок, без реальной криптографии)
@@ -46,8 +49,10 @@ func (v *JWTVerifier) Verify(token string) (Claims, error) {
 type PasetoVerifier struct{}
 
 func (v *PasetoVerifier) Verify(token string) (Claims, error) {
-	// TODO: implement
-	return Claims{}, nil
+	if token != "paseto-valid" {
+		return Claims{}, errors.New("pseto: unknown token")
+	}
+	return Claims{UserID: "user-paseto", Role: "admin"}, nil
 }
 
 func runVerification(name string, verifier TokenVerifier, tokens []string) {
@@ -64,7 +69,6 @@ func runVerification(name string, verifier TokenVerifier, tokens []string) {
 }
 
 func main() {
-	_ = errors.New // подсказка: используй для ошибок
 
 	runVerification("JWTVerifier", &JWTVerifier{}, []string{"jwt-valid", "bad-token"})
 	runVerification("PasetoVerifier", &PasetoVerifier{}, []string{"paseto-valid", "bad-token"})

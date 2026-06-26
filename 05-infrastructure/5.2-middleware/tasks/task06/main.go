@@ -70,12 +70,90 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
+type statusRecorder struct { // структура для перехвата статуса
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status                    // статус для нас
+	r.ResponseWriter.WriteHeader(status) // предали статус дальше в оригинальный ResponceWriter
+}
+
 // TODO: реализуй LoggingMiddleware(logger *slog.Logger) Middleware
 // Логируй: method, path, status, duration_ms
+func LoggingMiddleware(logger *slog.Logger) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			rec := &statusRecorder{
+				ResponseWriter: w,
+				status:         http.StatusOK,
+			}
+
+			next.ServeHTTP(rec, r)
+
+			duration := time.Since(start)
+
+			logger.Info(
+				"request completed",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", rec.status,
+				"duration_ms", duration.Milliseconds(),
+			)
+		})
+	}
+}
 
 // TODO: реализуй AuthMiddleware(verifier TokenVerifier) Middleware
 // Извлекай Bearer-токен, верифицируй, клади claims в context
 // На ошибке — 401 {"error":"<msg>"}
+
+func extractBearerToken(header string) (string, error) {
+	const prefix = "Bearer "
+
+	if !strings.HasPrefix(header, prefix) {
+		return "", errors.New("missing bearer token")
+	}
+
+	token := strings.TrimSpace(strings.TrimPrefix(header, prefix))
+
+	if token == "" {
+		return "", errors.New("empty token")
+	}
+
+	return token, nil
+}
+
+func AuthMiddleware(verifier TokenVerifier) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			raw := r.Header.Get("Authorization")
+
+			token, err := extractBearerToken(raw) // достали чистый токен
+			if err != nil {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{
+					"error": err.Error(),
+				})
+				return
+			}
+
+			claims, err := verifier.Verify(token)
+			if err != nil {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{
+					"error": err.Error(),
+				})
+			}
+
+			ctx := context.WithValue(r.Context(), claimsKey, claims)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
+
+		})
+	}
+}
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -83,7 +161,17 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 
 func meHandler(w http.ResponseWriter, r *http.Request) {
 	// TODO: достань claims из r.Context() и верни {"user_id":"...","role":"..."}
-	_ = context.Background // подсказка
+	claims, ok := r.Context().Value(claimsKey).(Claims)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "claims not found",
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"user_id": claims.UserID,
+		"role":    claims.Role,
+	})
 }
 
 func main() {
@@ -92,12 +180,20 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// TODO: зарегистрируй маршруты:
-	// /health — только с LoggingMiddleware
-	// /api/v1/me — с Chain(LoggingMiddleware + AuthMiddleware)
+	// публичный
+	mux.Handle(
+		"GET /health",
+		LoggingMiddleware(logger)(http.HandlerFunc(healthHandler)),
+	)
 
-	_ = strings.CutPrefix // убери после реализации
-	_ = time.Now          // убери после реализации
+	// защищенный
+	protected := Chain(
+		http.HandlerFunc(meHandler),
+		LoggingMiddleware(logger),
+		AuthMiddleware(verifier),
+	)
+
+	mux.Handle("GET /api/v1/me", protected)
 
 	srv := &http.Server{
 		Addr:              ":8080",

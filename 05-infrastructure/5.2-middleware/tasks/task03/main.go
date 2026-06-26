@@ -33,9 +33,23 @@ var (
 // Подсказка: используй strings.CutPrefix или strings.HasPrefix
 
 func extractBearerToken(header string) (string, error) {
-	// TODO: implement
-	_ = strings.HasPrefix // подсказка
-	return "", nil
+	const prefix = "Bearer "
+
+	if header == "" { //  если header пришел пустой
+		return "", ErrEmptyHeader
+	}
+
+	if !strings.HasPrefix(header, prefix) {
+		return "", ErrInvalidFormat // не валидный формат
+	}
+
+	token := strings.TrimSpace(strings.TrimPrefix(header, prefix)) // достали чистый токен
+
+	if token == "" {
+		return "", ErrEmptyToken // пустой токен
+	}
+
+	return token, nil
 }
 
 func main() {

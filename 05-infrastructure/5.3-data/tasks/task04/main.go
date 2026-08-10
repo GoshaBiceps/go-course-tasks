@@ -55,6 +55,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cource/data-task04/db"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -73,29 +74,27 @@ func main() {
 	}
 	defer pool.Close()
 
-	// TODO: после генерации sqlc раскомментируй и адаптируй:
-	// queries := db.New(pool)
-	//
-	// u, err := queries.CreateUser(ctx, "bob@example.com")
-	// if err != nil {
-	//     fmt.Println("create error:", err)
-	//     return
-	// }
-	// fmt.Printf("created: %+v\n", u)
-	//
-	// found, err := queries.GetUser(ctx, u.ID)
-	// if err != nil {
-	//     fmt.Println("get error:", err)
-	// } else {
-	//     fmt.Printf("found: %+v\n", found)
-	// }
-	//
-	// users, err := queries.ListUsers(ctx)
-	// if err != nil {
-	//     fmt.Println("list error:", err)
-	// } else {
-	//     fmt.Println("all users:", users)
-	// }
+	queries := db.New(pool)
 
-	fmt.Println("TODO: generate sqlc code and implement main")
+	u, err := queries.CreateUser(ctx, "bob@example.com")
+	if err != nil {
+		fmt.Println("create error:", err)
+		return
+	}
+	fmt.Printf("created: %+v\n", u)
+
+	found, err := queries.GetUser(ctx, u.ID)
+	if err != nil {
+		fmt.Println("get error:", err)
+	} else {
+		fmt.Printf("found: %+v\n", found)
+	}
+
+	users, err := queries.ListUsers(ctx)
+	if err != nil {
+		fmt.Println("list error:", err)
+	} else {
+		fmt.Println("all users:", users)
+	}
+
 }

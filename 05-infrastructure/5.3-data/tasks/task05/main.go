@@ -44,9 +44,135 @@ type Account struct {
 //   7. Выполнить tx.Commit(ctx)
 // Подсказка: pgx.ErrNoRows → ErrAccountNotFound через errors.Is
 
-func Transfer(ctx context.Context, pool *pgxpool.Pool, fromID, toID, amount int64) error {
-	// TODO: implement
-	_ = pgx.ErrNoRows // подсказка
+func Transfer(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	fromID, toID, amount int64,
+) error {
+	// Открываем транзакцию.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+
+	// Отложенный откат транзакции в случае ошибки.
+	defer tx.Rollback(ctx)
+
+	// Здесь будут храниться данные первого аккаунта.
+	var fromAccount Account
+
+	// Получаем from-аккаунт с блокировкой строки.
+	err = tx.QueryRow(
+		ctx,
+		`SELECT id, owner, balance
+		 FROM accounts
+		 WHERE id = $1
+		 FOR UPDATE`,
+		fromID,
+	).Scan(
+		&fromAccount.ID,
+		&fromAccount.Owner,
+		&fromAccount.Balance,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Если аккаунт не найден, возвращаем ErrAccountNotFound.
+			return fmt.Errorf(
+				"select from account %d: %w",
+				fromID,
+				ErrAccountNotFound,
+			)
+		}
+
+		// Если произошла другая ошибка, возвращаем её.
+		return fmt.Errorf("select from account %d: %w", fromID, err)
+	}
+
+	// Проверяем, достаточно ли денег на балансе первого аккаунта.
+	if fromAccount.Balance < amount {
+		// Оборачиваем нашу ошибку ErrInsufficientFunds.
+		return fmt.Errorf(
+			"account %d has insufficient funds: %w",
+			fromID,
+			ErrInsufficientFunds,
+		)
+	}
+
+	// Здесь будут храниться данные второго аккаунта.
+	var toAccount Account
+
+	// Получаем to-аккаунт с блокировкой строки.
+	err = tx.QueryRow(
+		ctx,
+		`SELECT id, owner, balance
+		 FROM accounts
+		 WHERE id = $1
+		 FOR UPDATE`,
+		toID,
+	).Scan(
+		&toAccount.ID,
+		&toAccount.Owner,
+		&toAccount.Balance,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Если второй аккаунт не найден, возвращаем ErrAccountNotFound.
+			return fmt.Errorf(
+				"select to account %d: %w",
+				toID,
+				ErrAccountNotFound,
+			)
+		}
+
+		// Если произошла другая ошибка, возвращаем её.
+		return fmt.Errorf("select to account %d: %w", toID, err)
+	}
+
+	// Обновляем данные в базе: уменьшаем баланс первого аккаунта.
+	_, err = tx.Exec(
+		ctx,
+		`UPDATE accounts
+		 SET balance = balance - $1
+		 WHERE id = $2`,
+		amount,
+		fromID,
+	)
+
+	if err != nil {
+		return fmt.Errorf(
+			"decrease balance for account %d: %w",
+			fromID,
+			err,
+		)
+	}
+
+	// Обновляем данные в базе: увеличиваем баланс второго аккаунта.
+	_, err = tx.Exec(
+		ctx,
+		`UPDATE accounts
+		 SET balance = balance + $1
+		 WHERE id = $2`,
+		amount,
+		toID,
+	)
+
+	if err != nil {
+		return fmt.Errorf(
+			"increase balance for account %d: %w",
+			toID,
+			err,
+		)
+	}
+
+	// Сохраняем результаты транзакции.
+	// После успешного Commit изменения станут видны другим операциям.
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transfer: %w", err)
+	}
+
+	// Ошибок нет — перевод успешно выполнен.
 	return nil
 }
 

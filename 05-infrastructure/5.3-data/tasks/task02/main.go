@@ -74,7 +74,31 @@ func NewAccountService(repo AccountRepository) *AccountService {
 
 func (s *AccountService) Transfer(ctx context.Context, fromID, toID, amount int64) error {
 	// TODO: implement
-	return nil
+	accountFrom, err := s.repo.GetByID(ctx, fromID) // получаем аккаунт отправителя
+	if err != nil {
+		return err // если аккаунт не найден, возвращаем ошибку
+	}
+
+	accountTo, err := s.repo.GetByID(ctx, toID) // получаем аккаунт получателя
+	if err != nil {
+		return err // если аккаунт получателя не найден, возвращаем ошибку
+	}
+
+	if accountFrom.Balance < amount { // проверяем, достаточно ли средств на аккаунте отправителя
+		return ErrInsufficientFunds // если средств недостаточно, возвращаем ошибку
+	}
+
+	accountFrom.Balance -= amount // списываем средства с аккаунта отправителя
+	accountTo.Balance += amount   // зачисляем средства на аккаунт получателя
+
+	if err := s.repo.Update(ctx, accountFrom); err != nil { // обновляем аккаунт отправителя
+		return err // если ошибка при обновлении, возвращаем её
+	}
+	if err := s.repo.Update(ctx, accountTo); err != nil { // обновляем аккаунт получателя
+		return err // если ошибка при обновлении, возвращаем её
+	}
+
+	return nil // если всё прошло успешно, возвращаем nil
 }
 
 func main() {

@@ -34,6 +34,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -62,15 +63,45 @@ func NewUserRepository(pool *pgxpool.Pool) UserRepository {
 func (r *pgxUserRepository) Create(ctx context.Context, email string) (User, error) {
 	// TODO: выполни INSERT ... RETURNING id, email, created_at
 	// Используй: row := r.pool.QueryRow(ctx, "INSERT INTO users...", email)
-	// Затем row.Scan(&u.ID, &u.Email, &u.CreatedAt)
-	return User{}, nil
+	// Затем row.Scan(&user.ID, &user.Email, &user.CreatedAt)
+	var user User
+
+	err := r.pool.QueryRow(
+		ctx,
+		"INSERT INTO users (email)  VALUES ($1) RETURNING id, email, created_at",
+		email,
+	).Scan(&user.ID, &user.Email, &user.CreatedAt)
+
+	if err != nil {
+		return User{}, err
+	}
+
+	return user, nil
 }
 
 func (r *pgxUserRepository) GetByID(ctx context.Context, id int64) (User, error) {
 	// TODO: выполни SELECT id, email, created_at FROM users WHERE id = $1
 	// Если pgx.ErrNoRows — верни ErrUserNotFound
 	// Подсказка: errors.Is(err, pgx.ErrNoRows)
-	return User{}, nil
+	var user User
+
+	err := r.pool.QueryRow(
+		ctx,
+		"SELECT id, email, created_at FROM users WHERE id = $1",
+		id,
+	).Scan(&user.ID, &user.Email, &user.CreatedAt)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrUserNotFound
+		}
+	}
+
+	if err != nil {
+		return User{}, err
+	}
+
+	return user, nil
 }
 
 func main() {

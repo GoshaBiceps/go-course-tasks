@@ -14,6 +14,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // routePattern возвращает шаблон маршрута для использования в метриках.
@@ -26,8 +27,17 @@ import (
 // Подсказка: r.Pattern доступен начиная с Go 1.22.
 
 func normalizeRoute(r *http.Request) string {
-	// TODO: implement
-	return "/unknown"
+	if r.Pattern == "" {
+		return "/unknown"
+	}
+
+	parts := strings.SplitN(
+		r.Pattern,
+		" ",
+		2,
+	)
+
+	return parts[1]
 }
 
 func main() {

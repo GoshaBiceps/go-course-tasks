@@ -11,9 +11,14 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"log/slog"
 	"os"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // traceFields извлекает trace_id и span_id из context (если есть активный span OTel).
@@ -30,7 +35,13 @@ import (
 // span.SpanContext().SpanID().String()
 
 func traceFields(ctx context.Context) []any {
-	// TODO: implement
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		return []any{
+			"trace_id", span.SpanContext().TraceID().String(),
+			"span_id", span.SpanContext().SpanID().String(),
+		}
+	}
 	return nil
 }
 
@@ -40,8 +51,12 @@ func traceFields(ctx context.Context) []any {
 // Объедини args и traceFields(ctx), затем вызови logger.Log(ctx, level, msg, allArgs...)
 
 func logWithTrace(ctx context.Context, logger *slog.Logger, level slog.Level, msg string, args ...any) {
-	// TODO: implement
-	logger.Log(ctx, level, msg, args...)
+	traceArgs := traceFields(ctx) // получаем наши значния из спанов
+
+	allArgs := append(args, traceArgs...) // добавляем значнеи из нашего слайса в слайс аргументов
+
+	logger.Log(ctx, level, msg, allArgs...) // записываем это все в логи
+
 }
 
 func main() {
@@ -49,14 +64,29 @@ func main() {
 	ctx := context.Background()
 
 	// TODO: инициализируй OTel TracerProvider (аналогично task04)
-	// TODO: создай span и используй его context в logWithTrace
+	exporter, err := stdouttrace.New( // экспоретр
+		stdouttrace.WithPrettyPrint(), // форматирование красиво
+	)
+
+	if err != nil { // если экспортер не создался
+		log.Fatal(err) // печать ошибки и завершенеи программы
+	}
+
+	tp := sdktrace.NewTracerProvider( // все спаны котоыре будут создаваться через этот провайдер опбрабатывай батчером
+		sdktrace.WithBatcher(exporter),
+	)
+
+	defer tp.Shutdown(ctx)
+
+	otel.SetTracerProvider(tp)
+
+	tracer := otel.Tracer("token-service")
 
 	// Пример использования (раскомментируй после реализации):
-	// ctx, span := tracer.Start(ctx, "handle-issue-token")
-	// defer span.End()
-	// logWithTrace(ctx, logger, slog.LevelInfo, "handling request", "user_id", "u-1")
-	// logWithTrace(ctx, logger, slog.LevelError, "operation failed", "error", "db timeout")
+	ctx, span := tracer.Start(ctx, "handle-issue-token")
+	defer span.End()
 
-	_ = logger
-	fmt.Println("TODO: implement trace correlation in logs")
+	logWithTrace(ctx, logger, slog.LevelInfo, "handling request", "user_id", "u-1")
+	logWithTrace(ctx, logger, slog.LevelError, "operation failed", "error", "db timeout")
+
 }

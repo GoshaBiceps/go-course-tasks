@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 )
 
 type statusRecorder struct {
@@ -13,7 +15,7 @@ type statusRecorder struct {
 }
 
 func (r *statusRecorder) WriteHeader(code int) {
-	// TODO: save code into r.status before forwarding
+	r.status = code
 	r.ResponseWriter.WriteHeader(code)
 }
 
@@ -25,8 +27,31 @@ func (r *statusRecorder) WriteHeader(code int) {
 // 4. Logs via logger: method, path, status, duration_ms
 
 func LoggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
-	// TODO: implement
-	return next
+
+	return http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			rec := &statusRecorder{
+				ResponseWriter: w,
+				status:         http.StatusOK,
+			}
+
+			next.ServeHTTP(rec, r)
+
+			duration := time.Since(start).Milliseconds()
+
+			status := strconv.Itoa(rec.status)
+
+			logger.Info(
+				"request completed",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", status,
+				"duration_ms", duration,
+			)
+		},
+	)
 }
 
 func main() {

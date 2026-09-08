@@ -36,51 +36,51 @@ import (
 // gRPC-коды статусов (имитация без импорта grpc/codes)
 type StatusCode int
 
-const (
+const ( // коды
 	CodeOK               StatusCode = 0
 	CodeInvalidArgument  StatusCode = 3
 	CodeNotFound         StatusCode = 5
 	CodePermissionDenied StatusCode = 7
 )
 
-type StatusError struct {
+type StatusError struct { // ошибка с статус кодом
 	Code    StatusCode
 	Message string
 }
 
-func (e *StatusError) Error() string {
+func (e *StatusError) Error() string { // текст ошибки
 	return fmt.Sprintf("rpc error: code = %d desc = %s", e.Code, e.Message)
 }
 
-func statusError(code StatusCode, msg string) error {
+func statusError(code StatusCode, msg string) error { //  возвращение нашей кастомной ошибки
 	return &StatusError{Code: code, Message: msg}
 }
 
 // --- Типы запросов и ответов ---
 
-type IssueTokenRequest struct {
+type IssueTokenRequest struct { // запрос на выдачу токена
 	UserID string
 }
 
-type IssueTokenResponse struct {
+type IssueTokenResponse struct { // ответ после выдачи токена
 	TokenID string
 	UserID  string
 }
 
-type ValidateTokenRequest struct {
+type ValidateTokenRequest struct { //  запрос на проверку токена
 	TokenID string
 }
 
-type ValidateTokenResponse struct {
+type ValidateTokenResponse struct { //  ну соответственно ответ проверки
 	UserID string
 	Valid  bool
 }
 
-type RevokeTokenRequest struct {
+type RevokeTokenRequest struct { //  так запрос на отзыв токена
 	TokenID string
 }
 
-type RevokeTokenResponse struct {
+type RevokeTokenResponse struct { // ну и ответ токен отозван
 	Revoked bool
 }
 
@@ -119,8 +119,26 @@ func NewTokenService() TokenServiceServer {
 //   4. Верни IssueTokenResponse
 
 func (s *tokenServiceImpl) IssueToken(ctx context.Context, req *IssueTokenRequest) (*IssueTokenResponse, error) {
-	// TODO: implement
-	return nil, statusError(CodeInvalidArgument, "not implemented")
+
+	if req.UserID == "" {
+		return nil, statusError(CodeInvalidArgument, "user_id is reqyured")
+	}
+
+	tokenID := fmt.Sprintf("tok-%d", s.nextID)
+
+	record := &tokenRecord{
+		tokenID: tokenID,
+		userID:  req.UserID,
+		revoked: false,
+	}
+
+	s.tokens[record.tokenID] = record
+	s.nextID++
+
+	return &IssueTokenResponse{
+		TokenID: record.tokenID,
+		UserID:  record.userID,
+	}, nil
 }
 
 // TODO: реализуй ValidateToken:
@@ -130,7 +148,19 @@ func (s *tokenServiceImpl) IssueToken(ctx context.Context, req *IssueTokenReques
 
 func (s *tokenServiceImpl) ValidateToken(ctx context.Context, req *ValidateTokenRequest) (*ValidateTokenResponse, error) {
 	// TODO: implement
-	return nil, statusError(CodeNotFound, "not implemented")
+	record, ok := s.tokens[req.TokenID]
+	if !ok {
+		return nil, statusError(CodeNotFound, "token not found")
+	}
+
+	if record.revoked == true {
+		return nil, statusError(CodePermissionDenied, "token revoked")
+	}
+
+	return &ValidateTokenResponse{
+		UserID: record.userID,
+		Valid:  true,
+	}, nil
 }
 
 // TODO: реализуй RevokeToken:
@@ -139,8 +169,18 @@ func (s *tokenServiceImpl) ValidateToken(ctx context.Context, req *ValidateToken
 //   3. Верни RevokeTokenResponse{Revoked: true}
 
 func (s *tokenServiceImpl) RevokeToken(ctx context.Context, req *RevokeTokenRequest) (*RevokeTokenResponse, error) {
+
+	token, ok := s.tokens[req.TokenID]
+	if !ok {
+		return nil, statusError(CodeNotFound, "token not found")
+	}
+
+	token.revoked = true
+
 	// TODO: implement
-	return nil, statusError(CodeNotFound, "not implemented")
+	return &RevokeTokenResponse{
+		Revoked: token.revoked,
+	}, nil
 }
 
 func main() {

@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-type UnaryHandler func(ctx context.Context, req any) (any, error)
+type UnaryHandler func(ctx context.Context, req any) (any, error) // описывает сам обработчик
 
-type UnaryInterceptor func(ctx context.Context, method string, req any, handler UnaryHandler) (any, error)
+type UnaryInterceptor func(ctx context.Context, method string, req any, handler UnaryHandler) (any, error) // описывает функцию , котора стоит вокруг  обработчика
 
 type GreetRequest struct {
 	Name string
@@ -33,9 +33,35 @@ func (s *greetService) Greet(ctx context.Context, req *GreetRequest) (*GreetResp
 // 4. Returns the handler's result
 
 func LoggingInterceptor() UnaryInterceptor {
-	return func(ctx context.Context, method string, req any, handler UnaryHandler) (any, error) {
-		// TODO: add timing and logging around the handler call
-		return handler(ctx, req)
+	return func(
+		ctx context.Context,
+		method string,
+		req any,
+		handler UnaryHandler,
+	) (any, error) {
+
+		start := time.Now() //
+
+		resp, err := handler(ctx, req)
+
+		duration := time.Since(start)
+
+		if err != nil {
+			fmt.Printf(
+				"method=%s duration=%s error=%v\n",
+				method,
+				duration,
+				err,
+			)
+		} else {
+			fmt.Printf(
+				"method=%s duration=%s\n",
+				method,
+				duration,
+			)
+		}
+
+		return resp, err
 	}
 }
 

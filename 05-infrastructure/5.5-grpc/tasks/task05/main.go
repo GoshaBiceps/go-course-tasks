@@ -115,8 +115,23 @@ func LoggingInterceptor() UnaryInterceptor {
 	return func(ctx context.Context, method string, req any, handler UnaryHandler) (any, error) {
 		// TODO: implement
 		start := time.Now()
+
 		resp, err := handler(ctx, req)
-		_ = start
+
+		elapsed := time.Since(start) // так посчитали время на отработку
+
+		status := "OK"
+
+		if err != nil {
+			if se, ok := err.(*StatusError); ok {
+				status = codeName(se.Code)
+			} else {
+				status = "Unknown"
+			}
+		}
+
+		fmt.Printf("[log] %s %s %s /n", method, elapsed.Round(100*time.Microsecond), status)
+
 		return resp, err
 	}
 }
@@ -128,8 +143,26 @@ func LoggingInterceptor() UnaryInterceptor {
 //   3. Иначе — вызови handler и верни результат
 
 func AuthInterceptor(serviceToken string) UnaryInterceptor {
-	return func(ctx context.Context, method string, req any, handler UnaryHandler) (any, error) {
-		// TODO: implement
+
+	return func(
+		ctx context.Context,
+		method string,
+		req any,
+		handler UnaryHandler,
+	) (any, error) {
+
+		token, ok := GetMetadata( // пытаемся достать мето данные по ключу
+			ctx,
+			"authorization",
+		)
+
+		if !ok || token != serviceToken { // так если вообще нет или токен не правильный то возвращем ошибку
+			return nil, &StatusError{
+				Code:    CodePermissionDenied,
+				Message: "invalid service token",
+			}
+		}
+
 		return handler(ctx, req)
 	}
 }
@@ -144,8 +177,22 @@ func AuthInterceptor(serviceToken string) UnaryInterceptor {
 
 func MetricsInterceptor() UnaryInterceptor {
 	return func(ctx context.Context, method string, req any, handler UnaryHandler) (any, error) {
-		// TODO: implement
-		return handler(ctx, req)
+
+		metrics.calls[method]++ // счетчик вызщова метода
+
+		resp, err := handler(ctx, req)
+
+		if err != nil {
+			metrics.errors[method]++
+		}
+
+		fmt.Printf(
+			"[metrics] %s calls=%d\n",
+			method,
+			metrics.calls[method],
+		)
+
+		return resp, err
 	}
 }
 
@@ -158,7 +205,28 @@ func MetricsInterceptor() UnaryInterceptor {
 func ChainInterceptors(interceptors ...UnaryInterceptor) UnaryInterceptor {
 	return func(ctx context.Context, method string, req any, handler UnaryHandler) (any, error) {
 		// TODO: implement
-		return handler(ctx, req)
+		chainedHandler := handler
+
+		for i := len(interceptors) - 1; i >= 0; i-- {
+
+			interceptor := interceptors[i]
+			next := chainedHandler
+
+			chainedHandler = func(
+				ctx context.Context,
+				req any,
+			) (any, error) {
+
+				return interceptor(
+					ctx,
+					method,
+					req,
+					next,
+				)
+			}
+		}
+
+		return chainedHandler(ctx, req)
 	}
 }
 
@@ -167,7 +235,10 @@ func ChainInterceptors(interceptors ...UnaryInterceptor) UnaryInterceptor {
 type IssueTokenRequest struct{ UserID string }
 type IssueTokenResponse struct{ TokenID, UserID string }
 type ValidateTokenRequest struct{ TokenID string }
-type ValidateTokenResponse struct{ UserID string; Valid bool }
+type ValidateTokenResponse struct {
+	UserID string
+	Valid  bool
+}
 
 type tokenStore struct {
 	tokens map[string]string

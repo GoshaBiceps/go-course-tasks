@@ -66,7 +66,10 @@ func (e *StatusError) Error() string {
 type IssueTokenRequest struct{ UserID string }
 type IssueTokenResponse struct{ TokenID, UserID string }
 type ValidateTokenRequest struct{ TokenID string }
-type ValidateTokenResponse struct{ UserID string; Valid bool }
+type ValidateTokenResponse struct {
+	UserID string
+	Valid  bool
+}
 type RevokeTokenRequest struct{ TokenID string }
 type RevokeTokenResponse struct{ Revoked bool }
 
@@ -135,9 +138,22 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 //	CodeNotFound         → 404
 //	CodePermissionDenied → 403
 //	иначе                → 500
+
 func grpcStatusToHTTP(code StatusCode) int {
-	// TODO: implement
-	return http.StatusInternalServerError
+	switch code {
+
+	case CodeInvalidArgument:
+		return http.StatusBadRequest
+
+	case CodeNotFound:
+		return http.StatusNotFound
+
+	case CodePermissionDenied:
+		return http.StatusForbidden
+
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
 // writeGRPCError отправляет JSON-ошибку с правильным HTTP-статусом.
@@ -159,12 +175,63 @@ func writeGRPCError(w http.ResponseWriter, err error) {
 //   4. При ошибке → writeGRPCError; при успехе → writeJSON 200 {"token":"...","user_id":"..."}
 //   5. Залогируй: logger.Info("login", "user_id", ..., "token_id", ...)
 
-func handleLogin(svc TokenServiceClient, logger *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: implement
-		_ = svc
-		_ = logger
-		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not implemented"})
+func handleLogin(
+	svc TokenServiceClient,
+	logger *slog.Logger,
+) http.HandlerFunc {
+
+	return func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+
+		var body struct {
+			UserID string `json:"user_id"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSON(
+				w,
+				http.StatusBadRequest,
+				map[string]string{
+					"error": "invalid json",
+				},
+			)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(
+			r.Context(),
+			2*time.Second,
+		)
+		defer cancel()
+
+		resp, err := svc.IssueToken(
+			ctx,
+			&IssueTokenRequest{
+				UserID: body.UserID,
+			},
+		)
+
+		if err != nil {
+			writeGRPCError(w, err)
+			return
+		}
+
+		logger.Info(
+			"login",
+			"user_id", resp.UserID,
+			"token_id", resp.TokenID,
+		)
+
+		writeJSON(
+			w,
+			http.StatusOK,
+			map[string]string{
+				"token":   resp.TokenID,
+				"user_id": resp.UserID,
+			},
+		)
 	}
 }
 
@@ -176,12 +243,61 @@ func handleLogin(svc TokenServiceClient, logger *slog.Logger) http.HandlerFunc {
 //   4. Вызови svc.ValidateToken(ctx, ...)
 //   5. При ошибке → writeGRPCError; при успехе → writeJSON 200 {"user_id":"...","valid":true}
 
-func handleVerify(svc TokenServiceClient, logger *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: implement
-		_ = svc
-		_ = logger
-		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not implemented"})
+func handleVerify(
+	svc TokenServiceClient,
+	logger *slog.Logger,
+) http.HandlerFunc {
+
+	return func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+
+		token, ok := extractBearer(r)
+
+		if !ok {
+			writeJSON(
+				w,
+				http.StatusUnauthorized,
+				map[string]string{
+					"error": "missing token",
+				},
+			)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(
+			r.Context(),
+			2*time.Second,
+		)
+		defer cancel()
+
+		resp, err := svc.ValidateToken(
+			ctx,
+			&ValidateTokenRequest{
+				TokenID: token,
+			},
+		)
+
+		if err != nil {
+			writeGRPCError(w, err)
+			return
+		}
+
+		logger.Info(
+			"verify",
+			"user_id", resp.UserID,
+			"token_id", token,
+		)
+
+		writeJSON(
+			w,
+			http.StatusOK,
+			map[string]any{
+				"user_id": resp.UserID,
+				"valid":   resp.Valid,
+			},
+		)
 	}
 }
 
@@ -192,12 +308,75 @@ func handleVerify(svc TokenServiceClient, logger *slog.Logger) http.HandlerFunc 
 //   3. Вызови svc.RevokeToken(ctx, ...)
 //   4. При ошибке → writeGRPCError; при успехе → writeJSON 200 {"revoked":true}
 
-func handleLogout(svc TokenServiceClient, logger *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: implement
-		_ = svc
-		_ = logger
-		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not implemented"})
+func handleLogout(
+	svc TokenServiceClient, // клиент TokenService
+	logger *slog.Logger, // логгер
+) http.HandlerFunc {
+
+	// Возвращаем HTTP-хендлер для POST /auth/logout.
+	return func(
+		w http.ResponseWriter, // сюда пишем HTTP-ответ
+		r *http.Request, // HTTP-запрос клиента
+	) {
+
+		// Сюда декодируем JSON:
+		// {"token":"tok-1"}
+		var body struct {
+			Token string `json:"token"`
+		}
+
+		// Читаем тело запроса и декодируем JSON в body.
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+
+			// Если JSON некорректный — HTTP 400.
+			writeJSON(
+				w,
+				http.StatusBadRequest,
+				map[string]string{
+					"error": "invalid json",
+				},
+			)
+			return
+		}
+
+		// Берём context текущего HTTP-запроса
+		// и добавляем timeout 2 секунды.
+		ctx, cancel := context.WithTimeout(
+			r.Context(),
+			2*time.Second,
+		)
+		defer cancel()
+
+		// Просим TokenService отозвать токен.
+		resp, err := svc.RevokeToken(
+			ctx,
+			&RevokeTokenRequest{
+				TokenID: body.Token,
+			},
+		)
+
+		// Если TokenService вернул ошибку —
+		// переводим gRPC-ошибку в HTTP-ответ.
+		if err != nil {
+			writeGRPCError(w, err)
+			return
+		}
+
+		// Логируем успешный logout.
+		logger.Info(
+			"logout",
+			"token_id", body.Token,
+		)
+
+		// Возвращаем клиенту:
+		// {"revoked":true}
+		writeJSON(
+			w,
+			http.StatusOK,
+			map[string]bool{
+				"revoked": resp.Revoked,
+			},
+		)
 	}
 }
 

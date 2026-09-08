@@ -51,7 +51,10 @@ func (e *StatusError) Error() string {
 type IssueTokenRequest struct{ UserID string }
 type IssueTokenResponse struct{ TokenID, UserID string }
 type ValidateTokenRequest struct{ TokenID string }
-type ValidateTokenResponse struct{ UserID string; Valid bool }
+type ValidateTokenResponse struct {
+	UserID string
+	Valid  bool
+}
 type RevokeTokenRequest struct{ TokenID string }
 type RevokeTokenResponse struct{ Revoked bool }
 
@@ -114,23 +117,52 @@ func (s *inProcessServer) RevokeToken(_ context.Context, req *RevokeTokenRequest
 
 // TODO: реализуй tokenServiceClient, который обёртывает in-process сервер.
 // В реальном проекте здесь был бы grpc.ClientConn.
-//
-// Структура:
-//   type tokenServiceClient struct {
-//       server *inProcessServer  // заменяет реальное соединение
-//   }
-//
+
+type tokenServiceClient struct {
+	server *inProcessServer // заменяет реальное соединение
+}
+
 // TODO: реализуй dial(addr string) (TokenServiceClient, error)
 //   Напечатай "Dialing token-service at <addr>..."
 //   Верни tokenServiceClient, обёртывающий inProcessServer
 
 func dial(addr string) (TokenServiceClient, error) {
-	// TODO: implement
-	fmt.Println("TODO: connect to", addr)
-	return nil, fmt.Errorf("not implemented")
+
+	fmt.Printf("Dailing token-service at %s...\n", addr)
+
+	server := newInProcessServer()
+
+	client := &tokenServiceClient{
+		server: server,
+	}
+
+	return client, nil
 }
 
 // TODO: реализуй методы tokenServiceClient — делегируй вызовы на s.server
+func (c *tokenServiceClient) IssueToken(
+	ctx context.Context,
+	req *IssueTokenRequest,
+) (*IssueTokenResponse, error) {
+
+	return c.server.IssueToken(ctx, req)
+}
+
+func (c *tokenServiceClient) ValidateToken(
+	ctx context.Context,
+	req *ValidateTokenRequest,
+) (*ValidateTokenResponse, error) {
+
+	return c.server.ValidateToken(ctx, req)
+}
+
+func (c *tokenServiceClient) RevokeToken(
+	ctx context.Context,
+	req *RevokeTokenRequest,
+) (*RevokeTokenResponse, error) {
+
+	return c.server.RevokeToken(ctx, req)
+}
 
 // TODO: реализуй handleError(err error) — проверяй StatusError.Code и печатай описание:
 //   CodeNotFound        → "not found: <msg>"
@@ -139,12 +171,29 @@ func dial(addr string) (TokenServiceClient, error) {
 //   иначе               → "unexpected error: <err>"
 
 func handleError(err error) {
-	// TODO: implement
+
 	var se *StatusError
+
 	if errors.As(err, &se) {
-		fmt.Println("rpc error:", se)
+
+		switch se.Code {
+
+		case CodeNotFound:
+			fmt.Println("not found:", se.Message)
+
+		case CodePermissionDenied:
+			fmt.Println("permission denied:", se.Message)
+
+		case CodeInvalidArgument:
+			fmt.Println("invalid argument:", se.Message)
+
+		default:
+			fmt.Println("unexpected error:", err)
+		}
+
 		return
 	}
+
 	fmt.Println("unexpected error:", err)
 }
 

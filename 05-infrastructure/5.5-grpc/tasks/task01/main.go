@@ -61,12 +61,49 @@ func NewOrderService() OrderServiceServer {
 
 func (s *orderServiceImpl) CreateOrder(ctx context.Context, req *CreateOrderRequest) (*CreateOrderResponse, error) {
 	// TODO: validate input, store order, return response
-	return &CreateOrderResponse{}, nil
+	if req.CustomerID == "" {
+		return nil, errors.New("customer_id is required")
+	}
+
+	if len(req.Items) == 0 {
+		return nil, errors.New("items are required")
+	}
+
+	orderID := fmt.Sprintf("order-%d", s.nextID) // создали id нового заказа
+
+	newOrder := order{ //  сформировали сам заказ
+		id:         orderID,
+		customerID: req.CustomerID,
+		items:      req.Items,
+		status:     "created",
+	}
+
+	s.orders[newOrder.id] = newOrder // положили заказ в хранилище
+	s.nextID++                       // увеличиваем счетчик
+
+	orederResponse := &CreateOrderResponse{ // собрали ответ клиенту
+		OrderID: newOrder.id,
+		Status:  newOrder.status,
+	}
+
+	return orederResponse, nil
 }
 
 func (s *orderServiceImpl) GetOrder(ctx context.Context, req *GetOrderRequest) (*GetOrderResponse, error) {
 	// TODO: look up order by ID, return ErrOrderNotFound if missing
-	return &GetOrderResponse{}, nil
+	foundOrder, ok := s.orders[req.OrderID] // нашли по айди заказ
+	if !ok {
+		return nil, ErrOrderNotFound
+	}
+
+	orderResponse := &GetOrderResponse{ //  собрали ответ клиенту
+		OrderID:    foundOrder.id,
+		CustomerID: foundOrder.customerID,
+		Items:      foundOrder.items,
+		Status:     foundOrder.status,
+	}
+
+	return orderResponse, nil
 }
 
 func main() {

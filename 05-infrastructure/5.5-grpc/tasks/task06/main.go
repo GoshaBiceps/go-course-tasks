@@ -309,26 +309,21 @@ func handleVerify(
 //   4. При ошибке → writeGRPCError; при успехе → writeJSON 200 {"revoked":true}
 
 func handleLogout(
-	svc TokenServiceClient, // клиент TokenService
-	logger *slog.Logger, // логгер
+	svc TokenServiceClient,
+	logger *slog.Logger,
 ) http.HandlerFunc {
 
-	// Возвращаем HTTP-хендлер для POST /auth/logout.
 	return func(
-		w http.ResponseWriter, // сюда пишем HTTP-ответ
-		r *http.Request, // HTTP-запрос клиента
+		w http.ResponseWriter,
+		r *http.Request,
 	) {
 
-		// Сюда декодируем JSON:
-		// {"token":"tok-1"}
 		var body struct {
 			Token string `json:"token"`
 		}
 
-		// Читаем тело запроса и декодируем JSON в body.
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 
-			// Если JSON некорректный — HTTP 400.
 			writeJSON(
 				w,
 				http.StatusBadRequest,
@@ -339,15 +334,12 @@ func handleLogout(
 			return
 		}
 
-		// Берём context текущего HTTP-запроса
-		// и добавляем timeout 2 секунды.
 		ctx, cancel := context.WithTimeout(
 			r.Context(),
 			2*time.Second,
 		)
 		defer cancel()
 
-		// Просим TokenService отозвать токен.
 		resp, err := svc.RevokeToken(
 			ctx,
 			&RevokeTokenRequest{
@@ -355,21 +347,16 @@ func handleLogout(
 			},
 		)
 
-		// Если TokenService вернул ошибку —
-		// переводим gRPC-ошибку в HTTP-ответ.
 		if err != nil {
 			writeGRPCError(w, err)
 			return
 		}
 
-		// Логируем успешный logout.
 		logger.Info(
 			"logout",
 			"token_id", body.Token,
 		)
 
-		// Возвращаем клиенту:
-		// {"revoked":true}
 		writeJSON(
 			w,
 			http.StatusOK,

@@ -10,7 +10,7 @@ type LinkService struct {
 	repo *repository.LinkRepository
 }
 
-func NewLinkRepository(repo *repository.LinkRepository) *LinkService {
+func NewLinkService(repo *repository.LinkRepository) *LinkService {
 	return &LinkService{
 		repo: repo,
 	}

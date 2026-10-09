@@ -53,4 +53,48 @@ func (h *LinkHandler) Shorten(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (h *LinkHandler) Redirect(w http.ResponseWriter, r *http.Request) {}
+func (h *LinkHandler) Redirect(w http.ResponseWriter, r *http.Request) {
+	shortCode := r.PathValue("code")
+
+	originalURL, err := h.service.GetOriginalURL(
+		r.Context(),
+		shortCode,
+	)
+
+	if err != nil {
+		http.Error(w, "link not found", http.StatusNotFound)
+		return
+	}
+
+	http.Redirect(w, r, originalURL, http.StatusFound) // перенавравляем по длинному урлу
+
+}
+
+type StatsResponse struct {
+	ShortCode string `json:"short_code"`
+	LongURL   string `json:"long_url"`
+	Clicks    int    `json:"clicks"`
+}
+
+func (h *LinkHandler) Stats(w http.ResponseWriter, r *http.Request) {
+
+	shortCode := r.PathValue("code")
+
+	link, err := h.service.GetStats(r.Context(), shortCode)
+
+	if err != nil {
+		http.Error(w, "link not found", http.StatusNotFound)
+		return
+	}
+	response := StatsResponse{
+		ShortCode: link.ShortCode,
+		LongURL:   link.LongURL,
+		Clicks:    link.Clicks,
+	}
+
+	w.Header().Set("Contetn-Type", "aplication/json")
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
+		return
+	}
+}

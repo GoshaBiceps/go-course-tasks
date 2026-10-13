@@ -8,11 +8,13 @@ import (
 
 type LinkHandler struct {
 	service *service.LinkService
+	baseURL string
 }
 
-func NewLinkHandler(serv *service.LinkService) *LinkHandler {
+func NewLinkHandler(serv *service.LinkService, baseURL string) *LinkHandler {
 	return &LinkHandler{
 		service: serv,
+		baseURL: baseURL,
 	}
 }
 
@@ -40,7 +42,7 @@ func (h *LinkHandler) Shorten(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := ShortenResponse{
-		ShortURL: "http://localhost:8080/" + link.ShortCode,
+		ShortURL: h.baseURL + "/" + link.ShortCode,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -92,7 +94,7 @@ func (h *LinkHandler) Stats(w http.ResponseWriter, r *http.Request) {
 		Clicks:    link.Clicks,
 	}
 
-	w.Header().Set("Contetn-Type", "aplication/json")
+	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
 		return

@@ -65,3 +65,17 @@ func (q *Queries) IncrementClicks(ctx context.Context, shortCode string) error {
 	_, err := q.db.Exec(ctx, incrementClicks, shortCode)
 	return err
 }
+
+const incrementClicksAndGetLink = `-- name: IncrementClicksAndGetLink :one
+UPDATE links
+SET clicks = clicks + 1
+WHERE short_code = $1
+RETURNING long_url
+`
+
+func (q *Queries) IncrementClicksAndGetLink(ctx context.Context, shortCode string) (string, error) {
+	row := q.db.QueryRow(ctx, incrementClicksAndGetLink, shortCode)
+	var long_url string
+	err := row.Scan(&long_url)
+	return long_url, err
+}

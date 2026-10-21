@@ -1,40 +1,21 @@
 package config
 
-import (
-	"errors"
-	"os"
-)
+import "github.com/caarlos0/env/v11"
 
 type Config struct {
-	DatabaseURL string // адрес подключения
-	HTTPPort    string // порт на котором рабоатет сервер
-	BaseURL     string // адрес из которого формируются короткие ссылки
+	DatabaseURL string `env:"DATABASE_URL,required"`                       // постгресс подключение
+	HTTPPort    string `env:"HTTP_PORT" envDefault:"8080"`                 // порт на котором  наше прилошеник пнимает запросы
+	BaseURL     string `env:"BASE_URL" envDefault:"http://localhost:8080"` // адрес из которого формируются короткие ссылки
+	RedisAddr   string `env:"REDIS_ADDR" envDefault:"localhost:6379"`      // подключение к редис наше кеширование ссылок
 }
 
 func Load() (Config, error) {
 
-	dbURL := os.Getenv("DATABASE_URL")
+	cfg := Config{}
 
-	if dbURL == "" {
-		return Config{}, errors.New("DATABASE_URL is required")
-	}
-
-	httpPORT := os.Getenv("HTTP_PORT")
-
-	if httpPORT == "" {
-		httpPORT = "8080"
-	}
-
-	baseURL := os.Getenv("BASE_URL")
-
-	if baseURL == "" {
-		baseURL = "http://localhost:8080"
-	}
-
-	cfg := Config{
-		DatabaseURL: dbURL,
-		HTTPPort:    httpPORT,
-		BaseURL:     baseURL,
+	err := env.Parse(&cfg)
+	if err != nil {
+		return Config{}, err
 	}
 
 	return cfg, nil

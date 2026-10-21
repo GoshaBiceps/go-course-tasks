@@ -61,3 +61,16 @@ func (l *LinkRepository) IncrementClicks(ctx context.Context, shortCode string) 
 
 	return nil
 }
+
+func (l *LinkRepository) IncrementClicksAndGetLink(ctx context.Context, shortCode string) (string, error) {
+
+	longURL, err := l.queries.IncrementClicksAndGetLink(
+		ctx,
+		shortCode,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	return longURL, nil
+}

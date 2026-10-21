@@ -15,3 +15,10 @@ WHERE short_code = $1;
 UPDATE links
 SET clicks = clicks + 1
 WHERE short_code = $1;
+
+
+-- name: IncrementClicksAndGetLink :one
+UPDATE links
+SET clicks = clicks + 1
+WHERE short_code = $1
+RETURNING long_url;

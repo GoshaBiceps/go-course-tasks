@@ -14,4 +14,12 @@ type Link struct {
 	LongUrl   string
 	Clicks    int32
 	CreatedAt pgtype.Timestamptz
+	UserID    pgtype.Int8
+}
+
+type User struct {
+	ID           int64
+	Email        string
+	PasswordHash string
+	CreatedAt    pgtype.Timestamptz
 }

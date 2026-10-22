@@ -7,6 +7,8 @@ package database
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createLink = `-- name: CreateLink :one
@@ -23,9 +25,17 @@ type CreateLinkParams struct {
 	LongUrl   string
 }
 
-func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) (Link, error) {
+type CreateLinkRow struct {
+	ID        int32
+	ShortCode string
+	LongUrl   string
+	Clicks    int32
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) (CreateLinkRow, error) {
 	row := q.db.QueryRow(ctx, createLink, arg.ShortCode, arg.LongUrl)
-	var i Link
+	var i CreateLinkRow
 	err := row.Scan(
 		&i.ID,
 		&i.ShortCode,
@@ -42,9 +52,17 @@ FROM links
 WHERE short_code = $1
 `
 
-func (q *Queries) GetLinkByCode(ctx context.Context, shortCode string) (Link, error) {
+type GetLinkByCodeRow struct {
+	ID        int32
+	ShortCode string
+	LongUrl   string
+	Clicks    int32
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetLinkByCode(ctx context.Context, shortCode string) (GetLinkByCodeRow, error) {
 	row := q.db.QueryRow(ctx, getLinkByCode, shortCode)
-	var i Link
+	var i GetLinkByCodeRow
 	err := row.Scan(
 		&i.ID,
 		&i.ShortCode,

@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 	"url-shortener/internal/domain"
 	"url-shortener/internal/repository"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -33,26 +35,49 @@ func (s *LinkService) CreateShortLink(ctx context.Context, longURL string) (doma
 		return domain.Link{}, err
 	}
 
-	shortLink := domain.GenerateShortCode()
+	//shortLink := domain.GenerateShortCode()
 
-	link.ShortCode = shortLink // положили в нашу струтуру
+	//link.ShortCode = shortLink // положили в нашу струтуру
 
-	err = s.repo.Save(ctx, link) // сохраняем нашу  структуру в базе
-	if err != nil {
+	//err = s.repo.Save(ctx, link) // сохраняем нашу  структуру в базе
+	//if err != nil {
+	//	return domain.Link{}, err
+	//}
+
+	for attempt := 0; attempt < 3; attempt++ {
+
+		shortLink := domain.GenerateShortCode()
+
+		link.ShortCode = shortLink
+
+		err = s.repo.Save(ctx, link)
+		if err == nil {
+			return link, nil
+		}
+
+		var pgErr *pgconn.PgError
+
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == "23505" && pgErr.ConstraintName == "links_short_code_key" {
+				continue
+			}
+		}
+
 		return domain.Link{}, err
 	}
 
-	return link, nil
+	return domain.Link{}, errors.New("failed to generate unique short code after 3 attempts")
+
 }
 
 func (s *LinkService) GetOriginalURL(ctx context.Context, shortCode string) (string, error) {
 
-	// 1. Ищем URL в Redis
+	//  Ищем URL в Redis
 	cacheURL, err := s.redisClient.Get(
 		ctx, shortCode,
 	).Result()
 
-	// 2. Cache Hit — ссылка найдена
+	// Cache Hit — ссылка найдена
 	if err == nil {
 		err = s.repo.IncrementClicks(ctx, shortCode)
 		if err != nil {
@@ -62,7 +87,7 @@ func (s *LinkService) GetOriginalURL(ctx context.Context, shortCode string) (str
 		return cacheURL, nil
 	}
 
-	// 3. Redis недоступен — продолжаем через PostgreSQL
+	// Redis недоступен — продолжаем через PostgreSQL
 	if err != redis.Nil {
 		slog.WarnContext(
 			ctx,
@@ -77,7 +102,7 @@ func (s *LinkService) GetOriginalURL(ctx context.Context, shortCode string) (str
 		return "", err
 	}
 
-	// 6. Сохраняем URL в Redis на один час
+	//  Сохраняем URL в Redis на один час
 	err = s.redisClient.Set(
 		ctx,
 		shortCode,
@@ -93,7 +118,7 @@ func (s *LinkService) GetOriginalURL(ctx context.Context, shortCode string) (str
 		)
 	}
 
-	// 7. Возвращаем оригинальный URL
+	//Возвращаем оригинальный URL
 	return longURL, nil
 }
 

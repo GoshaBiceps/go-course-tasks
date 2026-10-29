@@ -40,13 +40,15 @@ func main() {
 		)
 	}
 
-	repo := repository.NewLinkRepository(pool)
+	linkRepo := repository.NewLinkRepository(pool)
+	//userRepo := repository.NewUserRepository(pool)
 
-	serv := service.NewLinkService(repo, redisClient)
+	linkService := service.NewLinkService(linkRepo, redisClient)
+	//userService := service.NewUserService(userRepo)
 
-	hand := handler.NewLinkHandler(serv, cfg.BaseURL)
+	LinkHandler := handler.NewLinkHandler(linkService, cfg.BaseURL)
 
-	mux := handler.NewRouter(hand)
+	mux := handler.NewRouter(LinkHandler)
 
 	log.Println("HTTP server starting on :8080")
 

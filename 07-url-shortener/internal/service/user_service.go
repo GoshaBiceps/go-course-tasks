@@ -9,8 +9,13 @@ import (
 	"url-shortener/internal/repository"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var ErrInvalidRegistrationData = errors.New("invalid registration data")
+var ErrEmailAlreadyExists = errors.New("email already exists")
+var ErrInvalidCredentials = errors.New("invalid email or password")
 
 type UserService struct {
 	repo *repository.UserRepository
@@ -25,24 +30,25 @@ func NewUserService(repo *repository.UserRepository) *UserService {
 func (u *UserService) Register(ctx context.Context, email string, password string) error {
 
 	if email == "" {
-		return errors.New("email is required")
+		return fmt.Errorf("%w: email is required", ErrInvalidRegistrationData)
 	}
 
 	if password == "" {
-		return errors.New("password is required")
+		return fmt.Errorf("%w: password is required", ErrInvalidRegistrationData)
 	}
 
 	if len(password) < 8 {
-		return errors.New("password must be at least 8 characters")
+		return fmt.Errorf(
+			"%w: password must be at least 8 characters", ErrInvalidRegistrationData)
 	}
 
 	address, err := mail.ParseAddress(email)
 	if err != nil {
-		return errors.New("invalid email format")
+		return fmt.Errorf("%w: invalid email format", ErrInvalidRegistrationData)
 	}
 
 	if address.Address != email {
-		return errors.New("invalid email format")
+		return fmt.Errorf("%w: invalid email format", ErrInvalidRegistrationData)
 	}
 
 	hash, err := bcrypt.GenerateFromPassword(
@@ -60,7 +66,18 @@ func (u *UserService) Register(ctx context.Context, email string, password strin
 
 	_, err = u.repo.CreateUser(ctx, params)
 	if err != nil {
-		return fmt.Errorf("failed to create user: %w", err)
+		var pgErr *pgconn.PgError
+
+		if errors.As(err, &pgErr) &&
+			pgErr.Code == "23505" && // уникльность поля
+			pgErr.ConstraintName == "users_email_key" { // ограничение уникальности почты
+
+			return ErrEmailAlreadyExists
+		}
+
+		return fmt.Errorf(
+			"failed to create user: %w", err,
+		)
 	}
 
 	return nil

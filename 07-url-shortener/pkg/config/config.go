@@ -7,6 +7,7 @@ type Config struct {
 	HTTPPort    string `env:"HTTP_PORT" envDefault:"8080"`                 // порт на котором  наше прилошеник пнимает запросы
 	BaseURL     string `env:"BASE_URL" envDefault:"http://localhost:8080"` // адрес из которого формируются короткие ссылки
 	RedisAddr   string `env:"REDIS_ADDR" envDefault:"localhost:6379"`      // подключение к редис наше кеширование ссылок
+	JWTSecret   string `env:"JWT_SECRET,required"`                         // поле с нашим ключем
 }
 
 func Load() (Config, error) {

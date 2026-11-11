@@ -45,17 +45,18 @@ func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if errors.Is(err, service.ErrEmailAlreadyExists) {
+			http.Error(w, "email already registered", http.StatusConflict)
+			return
+		}
+
 		http.Error(
 			w,
 			"internal server error",
 			http.StatusInternalServerError,
 		)
 		return
-	}
 
-	if errors.Is(err, service.ErrEmailAlreadyExists) {
-		http.Error(w, "email already registered", http.StatusConflict)
-		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -77,7 +78,7 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.service.Login(r.Context(), req.Email, req.Password)
+	tokenString, err := h.service.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
 			http.Error(w, "invalid email or password", http.StatusUnauthorized)
@@ -88,6 +89,9 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "aplication/json")
+
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "login successful")
+
+	json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
 }

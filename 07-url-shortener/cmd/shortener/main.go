@@ -41,14 +41,15 @@ func main() {
 	}
 
 	linkRepo := repository.NewLinkRepository(pool)
-	//userRepo := repository.NewUserRepository(pool)
+	userRepo := repository.NewUserRepository(pool)
 
 	linkService := service.NewLinkService(linkRepo, redisClient)
-	//userService := service.NewUserService(userRepo)
+	userService := service.NewUserService(userRepo, cfg.JWTSecret)
 
-	LinkHandler := handler.NewLinkHandler(linkService, cfg.BaseURL)
+	linkHandler := handler.NewLinkHandler(linkService, cfg.BaseURL)
+	userHandler := handler.NewUserHandler(userService)
 
-	mux := handler.NewRouter(LinkHandler)
+	mux := handler.NewRouter(linkHandler, userHandler, cfg.JWTSecret)
 
 	log.Println("HTTP server starting on :8080")
 

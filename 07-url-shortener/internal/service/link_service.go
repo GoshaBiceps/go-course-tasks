@@ -35,15 +35,6 @@ func (s *LinkService) CreateShortLink(ctx context.Context, longURL string) (doma
 		return domain.Link{}, err
 	}
 
-	//shortLink := domain.GenerateShortCode()
-
-	//link.ShortCode = shortLink // положили в нашу струтуру
-
-	//err = s.repo.Save(ctx, link) // сохраняем нашу  структуру в базе
-	//if err != nil {
-	//	return domain.Link{}, err
-	//}
-
 	for attempt := 0; attempt < 3; attempt++ {
 
 		shortLink := domain.GenerateShortCode()

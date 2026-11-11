@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"strconv"
+	"time"
 	"url-shortener/internal/database"
 	"url-shortener/internal/repository"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/crypto/bcrypt"
@@ -18,12 +21,14 @@ var ErrEmailAlreadyExists = errors.New("email already exists")
 var ErrInvalidCredentials = errors.New("invalid email or password")
 
 type UserService struct {
-	repo *repository.UserRepository
+	repo      *repository.UserRepository
+	jwtSecret string
 }
 
-func NewUserService(repo *repository.UserRepository) *UserService {
+func NewUserService(repo *repository.UserRepository, jwtSecret string) *UserService {
 	return &UserService{
-		repo: repo,
+		repo:      repo,
+		jwtSecret: jwtSecret,
 	}
 }
 
@@ -83,14 +88,14 @@ func (u *UserService) Register(ctx context.Context, email string, password strin
 	return nil
 }
 
-func (u *UserService) Login(ctx context.Context, email string, password string) error {
+func (u *UserService) Login(ctx context.Context, email string, password string) (string, error) {
 
 	user, err := u.repo.GetUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return errors.New("invalid email or password")
+			return "", ErrInvalidCredentials
 		}
-		return fmt.Errorf("failed to get user: %w", err)
+		return "", fmt.Errorf("failed to get user: %w", err)
 	}
 
 	err = bcrypt.CompareHashAndPassword(
@@ -99,9 +104,29 @@ func (u *UserService) Login(ctx context.Context, email string, password string) 
 	)
 	if err != nil {
 		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-			return errors.New("invalid email or password")
+			return "", ErrInvalidCredentials
 		}
-		return fmt.Errorf("failed to verify password: %w", err)
+		return "", fmt.Errorf("failed to verify password: %w", err)
 	}
-	return nil
+
+	claims := jwt.RegisteredClaims{
+		Subject: strconv.FormatInt(user.ID, 10),
+		ExpiresAt: jwt.NewNumericDate( // преобразуем в формат который ожидает наша библиотека   и сохраняем время окончания токена
+			time.Now().Add(1 * time.Hour), // текущее время  + добавляем к нему час
+		),
+	}
+
+	token := jwt.NewWithClaims( // создаем объект токена , с нашими данными
+		jwt.SigningMethodHS256, // алгоритм подписи
+		claims,
+	)
+
+	tokenString, err := token.SignedString( // подписывает  JWT нашим сикретным ключом
+		[]byte(u.jwtSecret),
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign JWT token: %w", err)
+	}
+
+	return tokenString, nil
 }

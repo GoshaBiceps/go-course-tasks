@@ -6,18 +6,24 @@ import (
 	"log/slog"
 	"time"
 	"url-shortener/internal/domain"
-	"url-shortener/internal/repository"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
 )
 
+type LinkStore interface {
+	Save(ctx context.Context, link domain.Link) error
+	FinByCode(ctx context.Context, shortCode string) (domain.Link, error)
+	IncrementClicks(ctx context.Context, shortCode string) error
+	IncrementClicksAndGetLink(ctx context.Context, shortCode string) (string, error)
+}
+
 type LinkService struct {
-	repo        *repository.LinkRepository
+	repo        LinkStore
 	redisClient *redis.Client
 }
 
-func NewLinkService(repo *repository.LinkRepository, redis *redis.Client) *LinkService {
+func NewLinkService(repo LinkStore, redis *redis.Client) *LinkService {
 	return &LinkService{
 		repo:        repo,
 		redisClient: redis,
@@ -64,9 +70,7 @@ func (s *LinkService) CreateShortLink(ctx context.Context, longURL string) (doma
 func (s *LinkService) GetOriginalURL(ctx context.Context, shortCode string) (string, error) {
 
 	//  Ищем URL в Redis
-	cacheURL, err := s.redisClient.Get(
-		ctx, shortCode,
-	).Result()
+	cacheURL, err := s.redisClient.Get(ctx, shortCode).Result()
 
 	// Cache Hit — ссылка найдена
 	if err == nil {
@@ -80,11 +84,7 @@ func (s *LinkService) GetOriginalURL(ctx context.Context, shortCode string) (str
 
 	// Redis недоступен — продолжаем через PostgreSQL
 	if err != redis.Nil {
-		slog.WarnContext(
-			ctx,
-			"Redis GET failed",
-			"error", err,
-		)
+		slog.WarnContext(ctx, "Redis GET failed", "error", err)
 	}
 
 	// увеличиваем счетчик и  получаем ссылку
@@ -94,19 +94,10 @@ func (s *LinkService) GetOriginalURL(ctx context.Context, shortCode string) (str
 	}
 
 	//  Сохраняем URL в Redis на один час
-	err = s.redisClient.Set(
-		ctx,
-		shortCode,
-		longURL,
-		time.Hour,
-	).Err()
+	err = s.redisClient.Set(ctx, shortCode, longURL, time.Hour).Err()
 
 	if err != nil {
-		slog.WarnContext(
-			ctx,
-			"Redis SET failed",
-			"error", err,
-		)
+		slog.WarnContext(ctx, "Redis SET failed", "error", err)
 	}
 
 	//Возвращаем оригинальный URL

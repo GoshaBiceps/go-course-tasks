@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"time"
 	"url-shortener/internal/database"
-	"url-shortener/internal/repository"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
@@ -20,12 +19,17 @@ var ErrInvalidRegistrationData = errors.New("invalid registration data")
 var ErrEmailAlreadyExists = errors.New("email already exists")
 var ErrInvalidCredentials = errors.New("invalid email or password")
 
+type UserStore interface {
+	CreateUser(ctx context.Context, arg database.CreateUserParams) (database.CreateUserRow, error)
+	GetUserByEmail(ctx context.Context, email string) (database.User, error)
+}
+
 type UserService struct {
-	repo      *repository.UserRepository
+	repo      UserStore
 	jwtSecret string
 }
 
-func NewUserService(repo *repository.UserRepository, jwtSecret string) *UserService {
+func NewUserService(repo UserStore, jwtSecret string) *UserService {
 	return &UserService{
 		repo:      repo,
 		jwtSecret: jwtSecret,
@@ -74,7 +78,7 @@ func (u *UserService) Register(ctx context.Context, email string, password strin
 		var pgErr *pgconn.PgError
 
 		if errors.As(err, &pgErr) &&
-			pgErr.Code == "23505" && // уникльность поля
+			pgErr.Code == "23505" && // нарушение уникальности поля
 			pgErr.ConstraintName == "users_email_key" { // ограничение уникальности почты
 
 			return ErrEmailAlreadyExists
@@ -98,7 +102,7 @@ func (u *UserService) Login(ctx context.Context, email string, password string) 
 		return "", fmt.Errorf("failed to get user: %w", err)
 	}
 
-	err = bcrypt.CompareHashAndPassword(
+	err = bcrypt.CompareHashAndPassword( // проверка пороля
 		[]byte(user.PasswordHash),
 		[]byte(password),
 	)
@@ -118,7 +122,7 @@ func (u *UserService) Login(ctx context.Context, email string, password string) 
 
 	token := jwt.NewWithClaims( // создаем объект токена , с нашими данными
 		jwt.SigningMethodHS256, // алгоритм подписи
-		claims,
+		claims,                 // время окончания действия токена и айди
 	)
 
 	tokenString, err := token.SignedString( // подписывает  JWT нашим сикретным ключом

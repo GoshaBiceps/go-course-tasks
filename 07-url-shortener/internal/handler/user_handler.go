@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,11 +9,16 @@ import (
 	"url-shortener/internal/service"
 )
 
-type UserHandler struct {
-	service *service.UserService
+type UserServiceInterface interface {
+	Register(ctx context.Context, email string, password string) error
+	Login(ctx context.Context, email string, password string) (string, error)
 }
 
-func NewUserHandler(Userservice *service.UserService) *UserHandler {
+type UserHandler struct {
+	service UserServiceInterface
+}
+
+func NewUserHandler(Userservice UserServiceInterface) *UserHandler {
 	return &UserHandler{
 		service: Userservice,
 	}
@@ -89,7 +95,7 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "aplication/json")
+	w.Header().Set("Content-Type", "application/json")
 
 	w.WriteHeader(http.StatusOK)
 
